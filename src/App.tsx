@@ -11,7 +11,7 @@ import {
 } from './chess/engine';
 import { ChessBoard } from './chess/Board';
 import { ChessPiece, AnimatingPiece, GhostPiece, CutsceneAttacker, FallenKing, BOARD_SURFACE_Y, type PieceStyle } from './chess/pieces';
-import { CutsceneWeapon, WEAPON_DEFS, pickWeapon, type Weapon3D, type Blaster3D, type WeaponCategory } from './chess/weapons';
+import { CutsceneWeapon, WEAPON_DEFS, pickWeapon, getProjectilePos, type Weapon3D, type Blaster3D, type WeaponCategory } from './chess/weapons';
 import { GameUI } from './chess/GameUI';
 import { CutsceneOverlay } from './chess/CutsceneOverlay';
 import { CheckmateOverlay } from './chess/CheckmateOverlay';
@@ -227,7 +227,7 @@ function Scene() {
           return null;
         }
 
-        updateCutsceneCamera(prev.capturePos, prev.attackerColor, newPhase);
+        updateCutsceneCamera(prev, newPhase);
         return { ...prev, phase: newPhase };
       });
 
@@ -355,15 +355,24 @@ function Scene() {
     };
     setCutscene(cs);
     setCamOverride(true);
-    updateCutsceneCamera(anim.to, anim.pieceColor, 0);
+    updateCutsceneCamera(cs, 0);
   }, []);
 
-  const updateCutsceneCamera = useCallback((pos: Pos, attackerColor: PieceColor, phase: number) => {
+  const updateCutsceneCamera = useCallback((cs: Cutscene, phase: number) => {
+    const isRanged = cs.weaponCategory === 'ranged';
+    if (isRanged) {
+      updateRangedCamera(cs, phase);
+    } else {
+      updateMeleeCamera(cs.capturePos, cs.attackerColor, phase);
+    }
+  }, []);
+
+  // Melee camera (existing close-quarters choreography)
+  const updateMeleeCamera = useCallback((pos: Pos, attackerColor: PieceColor, phase: number) => {
     const cx = pos[1] - 3.5;
     const cz = pos[0] - 3.5;
     const targetY = BOARD_SURFACE_Y + 0.5;
 
-    // Attacker approach angle & side view
     const baseAngle = attackerColor === 'white' ? Math.PI * 0.8 : Math.PI * 0.2;
     const victimAngle = baseAngle + Math.PI;
     const sideAngle = (baseAngle + victimAngle) / 2 + Math.PI * 0.5;
@@ -372,35 +381,31 @@ function Scene() {
     let roll = 0;
 
     if (phase < 0.08) {
-      // Phase 1: Quick zoom INTO the faces (close-up for VS anime screen)
       const t = phase / 0.08;
       const eased = t * t;
-      const dist = 5 - eased * 3.5; // 5 → 1.5
-      const height = 3 - eased * 2.4; // 3 → 0.6 (face level)
+      const dist = 5 - eased * 3.5;
+      const height = 3 - eased * 2.4;
       camX = cx + Math.sin(sideAngle) * dist;
       camZ = cz + Math.cos(sideAngle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else if (phase < 0.30) {
-      // Phase 2: Stay close on the faces — VS dialogue
       const t = (phase - 0.08) / 0.22;
       const angle = sideAngle + t * 0.15;
-      const dist = 1.5 + t * 0.3; // 1.5 → 1.8
-      const height = 0.6 + t * 0.2; // 0.6 → 0.8
+      const dist = 1.5 + t * 0.3;
+      const height = 0.6 + t * 0.2;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else if (phase < 0.42) {
-      // Phase 3: Pull back to show both pieces + weapon
       const t = (phase - 0.30) / 0.12;
       const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
       const angle = sideAngle + 0.15 + eased * 0.15;
-      const dist = 1.8 + eased * 1.7; // 1.8 → 3.5
-      const height = 0.8 + eased * 1.2; // 0.8 → 2.0
+      const dist = 1.8 + eased * 1.7;
+      const height = 0.8 + eased * 1.2;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else if (phase < 0.55) {
-      // Phase 4: Kill shot — medium distance to see weapon swing
       const t = (phase - 0.42) / 0.13;
       const angle = sideAngle + 0.30 + t * 0.1;
       const dist = 3.5;
@@ -408,7 +413,6 @@ function Scene() {
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
-      // Camera shake at impact
       if (phase > 0.43) {
         const shakeT = (phase - 0.43) / 0.10;
         const shake = Math.max(0, 1 - shakeT) * 0.08;
@@ -417,32 +421,158 @@ function Scene() {
         roll = Math.max(0, 1 - shakeT) * 4;
       }
     } else if (phase < 0.78) {
-      // Phase 5: Slow orbit, attacker victorious
       const t = (phase - 0.55) / 0.23;
       const angle = sideAngle + 0.40 + t * 0.4;
-      const dist = 3.5 + t * 0.5; // 3.5 → 4.0
+      const dist = 3.5 + t * 0.5;
       const height = 2.0 + t * 0.5;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else {
-      // Phase 6: Pull back toward overview
       const t = (phase - 0.78) / 0.22;
       const eased = t * t;
       const angle = sideAngle + 0.80;
-      const dist = 4.0 + eased * 2.0; // 4 → 6
-      const height = 2.5 + eased * 2.0; // 2.5 → 4.5
+      const dist = 4.0 + eased * 2.0;
+      const height = 2.5 + eased * 2.0;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     }
 
-    // Look-at calculation
     const lookX = cx - camX;
     const lookZ = cz - camZ;
     const lookY = targetY - camY;
     const pitch = Math.atan2(lookY, Math.sqrt(lookX * lookX + lookZ * lookZ)) * (180 / Math.PI);
     const yaw = Math.atan2(lookX, lookZ) * (180 / Math.PI);
+
+    const newPos: [number, number, number] = [camX, camY, camZ];
+    const newRot: [number, number, number] = [pitch, yaw, roll];
+    setCamPos(newPos);
+    setCamRot(newRot);
+    lastCamPosRef.current = newPos;
+    lastCamRotRef.current = newRot;
+  }, []);
+
+  // Ranged camera: close-up on attacker, follow projectile, impact at victim, walk
+  const updateRangedCamera = useCallback((cs: Cutscene, phase: number) => {
+    const fx = cs.fromPos[1] - 3.5;
+    const fz = cs.fromPos[0] - 3.5;
+    const cx = cs.capturePos[1] - 3.5;
+    const cz = cs.capturePos[0] - 3.5;
+    const angle = cs.attackAngle;
+
+    // Perpendicular side angle for viewing
+    const sideAngle = angle + Math.PI * 0.5;
+
+    let camX: number, camY: number, camZ: number;
+    let lookAtX: number, lookAtY: number, lookAtZ: number;
+    let roll = 0;
+
+    if (phase < 0.08) {
+      // Zoom in on attacker at fromPos
+      const t = phase / 0.08;
+      const eased = t * t;
+      const dist = 5 - eased * 3.5;
+      const height = 3 - eased * 2.2;
+      camX = fx + Math.sin(sideAngle) * dist;
+      camZ = fz + Math.cos(sideAngle) * dist;
+      camY = BOARD_SURFACE_Y + height;
+      lookAtX = fx; lookAtY = BOARD_SURFACE_Y + 0.5; lookAtZ = fz;
+    } else if (phase < 0.22) {
+      // Close-up on attacker face / VS screen
+      const t = (phase - 0.08) / 0.14;
+      const a = sideAngle + t * 0.1;
+      const dist = 1.5 + t * 0.2;
+      const height = 0.6 + t * 0.15;
+      camX = fx + Math.sin(a) * dist;
+      camZ = fz + Math.cos(a) * dist;
+      camY = BOARD_SURFACE_Y + height;
+      lookAtX = fx; lookAtY = BOARD_SURFACE_Y + 0.5; lookAtZ = fz;
+    } else if (phase < 0.28) {
+      // Pull back slightly to show attacker aiming
+      const t = (phase - 0.22) / 0.06;
+      const eased = t * t;
+      const dist = 1.7 + eased * 0.8;
+      const height = 0.75 + eased * 0.3;
+      camX = fx + Math.sin(sideAngle + 0.1) * dist;
+      camZ = fz + Math.cos(sideAngle + 0.1) * dist;
+      camY = BOARD_SURFACE_Y + height;
+      // Start looking toward victim direction
+      const lookT = eased * 0.3;
+      lookAtX = fx + (cx - fx) * lookT;
+      lookAtY = BOARD_SURFACE_Y + 0.5;
+      lookAtZ = fz + (cz - fz) * lookT;
+    } else if (phase < 0.44) {
+      // FOLLOW THE PROJECTILE — camera tracks alongside it
+      const flyT = Math.min(1, (phase - 0.28) / 0.16);
+      const projPos = getProjectilePos(cs.fromPos, cs.capturePos, phase);
+
+      // Camera position: alongside projectile, slightly behind and above
+      const projX = fx + (cx - fx) * flyT;
+      const projZ = fz + (cz - fz) * flyT;
+      const dist = 2.0 - flyT * 0.5; // get closer as it arrives
+      const height = 1.0 + Math.sin(flyT * Math.PI) * 0.5;
+
+      camX = projX + Math.sin(sideAngle) * dist;
+      camZ = projZ + Math.cos(sideAngle) * dist;
+      camY = BOARD_SURFACE_Y + height;
+
+      // Look at projectile or slightly ahead of it
+      if (projPos) {
+        lookAtX = projPos[0] + Math.sin(angle) * 0.3;
+        lookAtY = projPos[1];
+        lookAtZ = projPos[2] + Math.cos(angle) * 0.3;
+      } else {
+        lookAtX = cx; lookAtY = BOARD_SURFACE_Y + 0.4; lookAtZ = cz;
+      }
+    } else if (phase < 0.55) {
+      // Impact! Camera at victim with shake
+      const t = (phase - 0.44) / 0.11;
+      const dist = 2.0 + t * 0.5;
+      const height = 1.2;
+      camX = cx + Math.sin(sideAngle) * dist;
+      camZ = cz + Math.cos(sideAngle) * dist;
+      camY = BOARD_SURFACE_Y + height;
+      lookAtX = cx; lookAtY = BOARD_SURFACE_Y + 0.4; lookAtZ = cz;
+
+      // Camera shake
+      if (phase > 0.44) {
+        const shakeT = (phase - 0.44) / 0.08;
+        const shake = Math.max(0, 1 - shakeT) * 0.1;
+        camX += Math.sin(phase * 200) * shake;
+        camZ += Math.cos(phase * 170) * shake;
+        roll = Math.max(0, 1 - shakeT) * 5;
+      }
+    } else if (phase < 0.88) {
+      // Follow attacker walking from fromPos to capturePos
+      const walkT = (phase - 0.55) / 0.33;
+      const eased = walkT < 0.5 ? 2 * walkT * walkT : 1 - Math.pow(-2 * walkT + 2, 2) / 2;
+      const walkerX = fx + (cx - fx) * eased;
+      const walkerZ = fz + (cz - fz) * eased;
+      const dist = 2.5 + walkT * 0.5;
+      const height = 1.2 + walkT * 0.8;
+      const a = sideAngle + walkT * 0.3;
+      camX = walkerX + Math.sin(a) * dist;
+      camZ = walkerZ + Math.cos(a) * dist;
+      camY = BOARD_SURFACE_Y + height;
+      lookAtX = walkerX; lookAtY = BOARD_SURFACE_Y + 0.4; lookAtZ = walkerZ;
+    } else {
+      // Pull back to overview
+      const t = (phase - 0.88) / 0.12;
+      const eased = t * t;
+      const dist = 3.0 + eased * 3.0;
+      const height = 2.0 + eased * 2.5;
+      camX = cx + Math.sin(sideAngle + 0.3) * dist;
+      camZ = cz + Math.cos(sideAngle + 0.3) * dist;
+      camY = BOARD_SURFACE_Y + height;
+      lookAtX = cx; lookAtY = BOARD_SURFACE_Y + 0.3; lookAtZ = cz;
+    }
+
+    const dx = lookAtX - camX;
+    const dz = lookAtZ - camZ;
+    const dy = lookAtY - camY;
+    const pitch = Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) * (180 / Math.PI);
+    const yaw = Math.atan2(dx, dz) * (180 / Math.PI);
 
     const newPos: [number, number, number] = [camX, camY, camZ];
     const newRot: [number, number, number] = [pitch, yaw, roll];
@@ -906,14 +1036,16 @@ function Scene() {
           />
         )}
 
-        {/* Cutscene attacker - stands behind victim, walks onto square after kill */}
+        {/* Cutscene attacker - melee: behind victim; ranged: at fromPos */}
         {cutscene && (
           <CutsceneAttacker
             type={cutscene.attackerType}
             color={cutscene.attackerColor}
             capturePos={cutscene.capturePos}
+            fromPos={cutscene.fromPos}
             attackAngle={cutscene.attackAngle}
             phase={cutscene.phase}
+            isRanged={cutscene.weaponCategory === 'ranged'}
             pieceStyle={pieceStyle}
           />
         )}

@@ -243,9 +243,33 @@ function WeaponModel({ type }: { type: Weapon3D | Blaster3D }) {
 
 // ---- Projectile for ranged attacks ----
 
-function Projectile({ from, to, phase, attackerColor }: {
-  from: [number, number, number];
-  to: [number, number, number];
+// Exported so camera can track the projectile position
+export const RANGED_PROJECTILE_PHASE_START = 0.28;
+export const RANGED_PROJECTILE_PHASE_END = 0.44;
+export const RANGED_FIRE_PHASE = 0.28; // when blaster fires
+export const RANGED_WALK_START = 0.55;
+export const RANGED_WALK_END = 0.88;
+
+export function getProjectilePos(
+  fromPos: Pos, capturePos: Pos, phase: number
+): [number, number, number] | null {
+  const flyT = smoothstep(RANGED_PROJECTILE_PHASE_START, RANGED_PROJECTILE_PHASE_END, phase);
+  if (flyT <= 0 || flyT >= 1) return null;
+  const fx = fromPos[1] - 3.5;
+  const fz = fromPos[0] - 3.5;
+  const cx = capturePos[1] - 3.5;
+  const cz = capturePos[0] - 3.5;
+  const y = BOARD_SURFACE_Y + 0.5;
+  return [
+    fx + (cx - fx) * flyT,
+    y + Math.sin(flyT * Math.PI) * 0.4,
+    fz + (cz - fz) * flyT,
+  ];
+}
+
+function Projectile({ fromPos, capturePos, phase, attackerColor }: {
+  fromPos: Pos;
+  capturePos: Pos;
   phase: number;
   attackerColor: string;
 }) {
@@ -259,25 +283,41 @@ function Projectile({ from, to, phase, attackerColor }: {
     emissive: isWhite ? [0.3, 0.8, 1.0] : [1.0, 0.4, 0.1],
     opacity: 0.4,
   });
+  const trail = useMaterial({
+    diffuse: isWhite ? [0.4, 0.85, 0.95] : [1.0, 0.6, 0.15],
+    emissive: isWhite ? [0.15, 0.5, 0.7] : [0.8, 0.2, 0.0],
+    opacity: 0.25,
+  });
 
-  // Projectile flies from attacker to victim between phase 0.38-0.44
-  const flyT = smoothstep(0.38, 0.44, phase);
-  if (flyT <= 0 || flyT >= 1) return null;
+  const pos = getProjectilePos(fromPos, capturePos, phase);
+  if (!pos) return null;
 
-  const x = from[0] + (to[0] - from[0]) * flyT;
-  const y = from[1] + (to[1] - from[1]) * flyT + Math.sin(flyT * Math.PI) * 0.3;
-  const z = from[2] + (to[2] - from[2]) * flyT;
+  const flyT = smoothstep(RANGED_PROJECTILE_PHASE_START, RANGED_PROJECTILE_PHASE_END, phase);
+  const spin = flyT * 1080;
 
-  // Spin the projectile
-  const spin = flyT * 720;
+  // Stretch in direction of travel for speed feel
+  const stretchZ = 1 + flyT * 2;
+
+  // Face direction of travel
+  const fx = fromPos[1] - 3.5;
+  const fz = fromPos[0] - 3.5;
+  const cx = capturePos[1] - 3.5;
+  const cz = capturePos[0] - 3.5;
+  const travelYaw = Math.atan2(cx - fx, cz - fz) * (180 / Math.PI);
 
   return (
-    <Entity position={[x, y, z]} rotation={[0, spin, 0]}>
-      <Entity scale={[0.08, 0.08, 0.08]}>
+    <Entity position={pos} rotation={[0, travelYaw, 0]}>
+      {/* Core */}
+      <Entity scale={[0.1, 0.1, 0.1 * stretchZ]} rotation={[0, spin, 0]}>
         <Render type="sphere" material={core} />
       </Entity>
-      <Entity scale={[0.15, 0.15, 0.15]}>
+      {/* Glow */}
+      <Entity scale={[0.18, 0.18, 0.18 * stretchZ]}>
         <Render type="sphere" material={glow} />
+      </Entity>
+      {/* Trail */}
+      <Entity position={[0, 0, -0.15 * stretchZ]} scale={[0.1, 0.1, 0.25 * stretchZ]}>
+        <Render type="sphere" material={trail} />
       </Entity>
     </Entity>
   );
@@ -364,7 +404,7 @@ function MeleeCutsceneWeapon({ weaponType, capturePos, attackAngle, phase }: {
   );
 }
 
-// ---- Ranged animation (aim + fire projectile) ----
+// ---- Ranged animation (attacker shoots from fromPos, projectile flies to victim) ----
 
 function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, phase, attackerColor }: {
   weaponDef: WeaponDef;
@@ -379,56 +419,79 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
   const fx = fromPos[1] - 3.5;
   const fz = fromPos[0] - 3.5;
 
-  // Blaster appears and aims
-  const appear = smoothstep(0.28, 0.34, phase);
-  const aimT = smoothstep(0.30, 0.37, phase);
-  const recoilT = smoothstep(0.43, 0.46, phase);
-  const recoilRecover = smoothstep(0.46, 0.52, phase);
-  const fadeT = smoothstep(0.70, 0.82, phase);
+  // Blaster appears at attacker's fromPos
+  const appear = smoothstep(0.10, 0.16, phase);
+  const fadeT = smoothstep(0.75, 0.88, phase);
 
-  // Follow attacker walk-forward
-  const walkT = smoothstep(0.50, 0.66, phase);
-  const attackerBehind = 0.8 * (1 - walkT);
+  // Recoil on fire
+  const recoilT = smoothstep(0.28, 0.31, phase);
+  const recoilRecover = smoothstep(0.31, 0.38, phase);
 
-  // Blaster held at hip height, in front of attacker
-  const holdDist = attackerBehind - 0.15; // slightly in front of attacker
-  const holdX = -Math.sin(attackAngle) * holdDist;
-  const holdZ = -Math.cos(attackAngle) * holdDist;
+  // Attacker walks from fromPos to capturePos after hit
+  const walkT = smoothstep(RANGED_WALK_START, RANGED_WALK_END, phase);
+  const posX = fx + (cx - fx) * walkT;
+  const posZ = fz + (cz - fz) * walkT;
+
+  // Blaster held at side, slightly forward
+  const holdOffsetX = Math.sin(attackAngle) * 0.2;
+  const holdOffsetZ = Math.cos(attackAngle) * 0.2;
   const holdY = BOARD_SURFACE_Y + 0.45;
 
-  // Aim: tilt toward victim
-  const aimPitch = aimT * -8; // slight downward aim
   const facingYaw = attackAngle * (180 / Math.PI);
 
-  // Recoil kick on fire
-  const recoil = (recoilT - recoilRecover * recoilT) * 0.15;
+  // Recoil kick backwards
+  const recoil = (recoilT - recoilRecover * recoilT) * 0.2;
   const recoilX = -Math.sin(attackAngle) * recoil;
   const recoilZ = -Math.cos(attackAngle) * recoil;
 
-  const scale = appear * (1 - fadeT);
+  // After fire, blaster tilts down casually
+  const restPitch = smoothstep(0.35, 0.50, phase) * 25;
 
-  // Projectile positions: from attacker to victim
-  const projFrom: [number, number, number] = [
-    cx + holdX, holdY + 0.15, cz + holdZ,
-  ];
-  const projTo: [number, number, number] = [
-    cx, BOARD_SURFACE_Y + 0.4, cz,
-  ];
+  const scale = appear * (1 - fadeT);
 
   return (
     <>
-      {/* Blaster model */}
+      {/* Blaster model at attacker position */}
       {appear > 0.01 && fadeT < 0.99 && (
         <Entity
-          position={[cx + holdX + recoilX, holdY, cz + holdZ + recoilZ]}
-          rotation={[aimPitch, facingYaw + 90, 0]}
+          position={[posX + holdOffsetX + recoilX, holdY, posZ + holdOffsetZ + recoilZ]}
+          rotation={[-restPitch, facingYaw + 90, 0]}
           scale={[scale, scale, scale]}
         >
           <WeaponModel type={weaponDef.type as Blaster3D} />
         </Entity>
       )}
+      {/* Muzzle flash */}
+      {phase > 0.27 && phase < 0.32 && (
+        <MuzzleFlash
+          x={posX + Math.sin(attackAngle) * 0.4}
+          y={holdY + 0.1}
+          z={posZ + Math.cos(attackAngle) * 0.4}
+          phase={phase}
+          attackerColor={attackerColor}
+        />
+      )}
       {/* Projectile */}
-      <Projectile from={projFrom} to={projTo} phase={phase} attackerColor={attackerColor} />
+      <Projectile fromPos={fromPos} capturePos={capturePos} phase={phase} attackerColor={attackerColor} />
     </>
+  );
+}
+
+function MuzzleFlash({ x, y, z, phase, attackerColor }: {
+  x: number; y: number; z: number; phase: number; attackerColor: string;
+}) {
+  const isWhite = attackerColor === 'white';
+  const flash = useMaterial({
+    diffuse: [1, 1, 0.9],
+    emissive: isWhite ? [0.3, 0.8, 1.0] : [1.0, 0.5, 0.0],
+    opacity: 0.7,
+  });
+  const t = (phase - 0.27) / 0.05;
+  const s = Math.sin(t * Math.PI) * 0.2;
+  if (s <= 0.01) return null;
+  return (
+    <Entity position={[x, y, z]} scale={[s, s, s]}>
+      <Render type="sphere" material={flash} />
+    </Entity>
   );
 }

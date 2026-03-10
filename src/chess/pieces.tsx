@@ -534,37 +534,62 @@ function smoothstepLocal(e0: number, e1: number, x: number) {
   return t * t * (3 - 2 * t);
 }
 
-// Cutscene attacker: stands behind victim, then walks onto the square after the kill
-export function CutsceneAttacker({ type, color, capturePos, attackAngle, phase, pieceStyle = 'gopher' }: {
+// Cutscene attacker: stands behind victim (melee) or at fromPos (ranged), then walks onto capture square
+export function CutsceneAttacker({ type, color, capturePos, fromPos, attackAngle, phase, isRanged = false, pieceStyle = 'gopher' }: {
   type: PieceType; color: PieceColor;
   capturePos: Pos;
+  fromPos?: Pos;
   attackAngle: number;
   phase: number;
+  isRanged?: boolean;
   pieceStyle?: PieceStyle;
 }) {
   const PieceComponent = getComponents(pieceStyle)[type];
   const cx = capturePos[1] - 3.5;
   const cz = capturePos[0] - 3.5;
 
-  // Before hit: stand behind the capture point facing victim
-  // After hit: walk forward onto the capture square
-  const walkT = smoothstepLocal(0.50, 0.66, phase);
+  const facingY = attackAngle * (180 / Math.PI);
 
-  // Starts 0.8 units behind the capture point, walks to center
+  if (isRanged && fromPos) {
+    // Ranged: attacker stands at fromPos, walks to capturePos after the kill
+    const fx = fromPos[1] - 3.5;
+    const fz = fromPos[0] - 3.5;
+
+    const walkT = smoothstepLocal(0.55, 0.88, phase);
+    const posX = fx + (cx - fx) * walkT;
+    const posZ = fz + (cz - fz) * walkT;
+
+    // Walking waddle during walk phase
+    const isWalking = phase > 0.55 && phase < 0.88;
+    const wobble = isWalking ? Math.sin(phase * 40) * 6 * (1 - walkT) : 0;
+
+    // Small victory hop when projectile hits
+    const hopT = phase > 0.44 && phase < 0.52 ? (phase - 0.44) / 0.08 : 0;
+    const hop = hopT > 0 ? Math.sin(hopT * Math.PI) * 0.1 : 0;
+
+    return (
+      <Entity
+        position={[posX, BOARD_SURFACE_Y + hop, posZ]}
+        rotation={[0, 0, wobble]}
+      >
+        <Entity rotation={[0, facingY, 0]}>
+          <PieceComponent color={color} />
+        </Entity>
+      </Entity>
+    );
+  }
+
+  // Melee: stands behind capture point, walks onto square after kill
+  const walkT = smoothstepLocal(0.50, 0.66, phase);
   const behindDist = 0.8 * (1 - walkT);
   const offsetX = -Math.sin(attackAngle) * behindDist;
   const offsetZ = -Math.cos(attackAngle) * behindDist;
 
-  // Walking waddle during walk phase
   const isWalking = phase > 0.50 && phase < 0.66;
   const wobble = isWalking ? Math.sin(phase * 50) * 6 * (1 - walkT) : 0;
 
-  // Small hop at impact
   const hopT = phase > 0.42 && phase < 0.50 ? (phase - 0.42) / 0.08 : 0;
   const hop = hopT > 0 ? Math.sin(hopT * Math.PI) * 0.12 : 0;
-
-  // Face toward the victim
-  const facingY = attackAngle * (180 / Math.PI);
 
   return (
     <Entity

@@ -5,18 +5,19 @@ type SoundId =
   | 'bruh' | 'oof' | 'dramatic' | 'victory'
   | 'explosion' | 'gunshot' | 'faaah';
 
+// Use relative paths so they work on GitHub Pages (subdirectory hosting)
 const SOUND_URLS: Record<SoundId, string> = {
-  'vine-boom': '/assets/sounds/vine-boom.mp3',
-  'air-horn': '/assets/sounds/air-horn.mp3',
-  'bonk': '/assets/sounds/bonk.mp3',
-  'sad-trombone': '/assets/sounds/sad-trombone.mp3',
-  'bruh': '/assets/sounds/bruh.mp3',
-  'oof': '/assets/sounds/oof.mp3',
-  'dramatic': '/assets/sounds/dramatic.mp3',
-  'victory': '/assets/sounds/victory.mp3',
-  'explosion': '/assets/sounds/explosion.mp3',
-  'gunshot': '/assets/sounds/gunshot.mp3',
-  'faaah': '/assets/sounds/faaah.mp3',
+  'vine-boom': 'assets/sounds/vine-boom.mp3',
+  'air-horn': 'assets/sounds/air-horn.mp3',
+  'bonk': 'assets/sounds/bonk.mp3',
+  'sad-trombone': 'assets/sounds/sad-trombone.mp3',
+  'bruh': 'assets/sounds/bruh.mp3',
+  'oof': 'assets/sounds/oof.mp3',
+  'dramatic': 'assets/sounds/dramatic.mp3',
+  'victory': 'assets/sounds/victory.mp3',
+  'explosion': 'assets/sounds/explosion.mp3',
+  'gunshot': 'assets/sounds/gunshot.mp3',
+  'faaah': 'assets/sounds/faaah.mp3',
 };
 
 // Impact sounds — played on hit

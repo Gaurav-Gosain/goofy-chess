@@ -11,7 +11,7 @@ import {
 } from './chess/engine';
 import { ChessBoard } from './chess/Board';
 import { ChessPiece, AnimatingPiece, GhostPiece, CutsceneAttacker, FallenKing, BOARD_SURFACE_Y, type PieceStyle } from './chess/pieces';
-import { CutsceneWeapon, WEAPON_DEFS, type Weapon3D } from './chess/weapons';
+import { CutsceneWeapon, WEAPON_DEFS, pickWeapon, type Weapon3D, type Blaster3D, type WeaponCategory } from './chess/weapons';
 import { GameUI } from './chess/GameUI';
 import { CutsceneOverlay } from './chess/CutsceneOverlay';
 import { CheckmateOverlay } from './chess/CheckmateOverlay';
@@ -43,7 +43,8 @@ interface Cutscene {
   capturePos: Pos;
   fromPos: Pos;
   attackAngle: number; // radians
-  weaponType: Weapon3D;
+  weaponCategory: WeaponCategory;
+  weaponType: Weapon3D | Blaster3D;
   weaponName: string;
   weaponEmoji: string;
   phase: number; // 0-1
@@ -334,8 +335,8 @@ function Scene() {
     const dz = (anim.to[0] - anim.from[0]);
     const attackAngle = Math.atan2(dx, dz);
 
-    // Pick random weapon
-    const weapon = WEAPON_DEFS[Math.floor(Math.random() * WEAPON_DEFS.length)];
+    // Pick weapon based on capture distance
+    const weapon = pickWeapon(anim.from, anim.to);
 
     const cs: Cutscene = {
       attackerType: anim.pieceType,
@@ -345,6 +346,7 @@ function Scene() {
       capturePos: anim.to,
       fromPos: anim.from,
       attackAngle,
+      weaponCategory: weapon.category,
       weaponType: weapon.type,
       weaponName: weapon.name,
       weaponEmoji: weapon.emoji,
@@ -932,10 +934,12 @@ function Scene() {
         {/* 3D weapon during cutscene */}
         {cutscene && (
           <CutsceneWeapon
-            weaponType={cutscene.weaponType}
+            weaponDef={{ category: cutscene.weaponCategory, type: cutscene.weaponType, name: cutscene.weaponName, emoji: cutscene.weaponEmoji }}
             capturePos={cutscene.capturePos}
+            fromPos={cutscene.fromPos}
             attackAngle={cutscene.attackAngle}
             phase={cutscene.phase}
+            attackerColor={cutscene.attackerColor}
           />
         )}
 

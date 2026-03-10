@@ -169,6 +169,19 @@ for (const file of ["King.glb", "Queen.glb", "Bishop.glb", "Knight.glb", "Rook.g
 }
 console.log("📦 Copied chess piece GLB models");
 
+// Weapon GLB models
+const weaponAssetsDir = path.join(outdirStr, "assets", "weapons");
+mkdirSync(weaponAssetsDir, { recursive: true });
+const srcWeaponAssets = path.resolve("src", "chess", "assets", "weapons");
+for (const file of [
+  "sword.glb", "spear.glb", "shield.glb",
+  "blaster-a.glb", "blaster-d.glb", "blaster-e.glb",
+  "blaster-h.glb", "blaster-k.glb", "blaster-n.glb",
+]) {
+  copyFileSync(path.join(srcWeaponAssets, file), path.join(weaponAssetsDir, file));
+}
+console.log("📦 Copied weapon GLB models");
+
 // Stockfish WASM engine
 const stockfishOutDir = path.join(outdirStr, "stockfish");
 mkdirSync(stockfishOutDir, { recursive: true });

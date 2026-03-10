@@ -357,94 +357,75 @@ function Scene() {
     const cz = pos[0] - 3.5;
     const targetY = BOARD_SURFACE_Y + 0.5;
 
-    // Base approach angle from attacker's side
+    // Attacker approach angle & side view
     const baseAngle = attackerColor === 'white' ? Math.PI * 0.8 : Math.PI * 0.2;
-    // Victim side is opposite
     const victimAngle = baseAngle + Math.PI;
+    const sideAngle = (baseAngle + victimAngle) / 2 + Math.PI * 0.5;
 
     let camX: number, camY: number, camZ: number;
     let roll = 0;
 
-    if (phase < 0.07) {
-      // Phase 1: Dramatic zoom from overview to close on victim
-      const t = phase / 0.07;
+    if (phase < 0.08) {
+      // Phase 1: Quick zoom INTO the faces (close-up for VS anime screen)
+      const t = phase / 0.08;
       const eased = t * t;
-      const dist = 5 - eased * 3.5; // 5 → 1.5
-      const height = 3.5 - eased * 2.9; // 3.5 → 0.6
-      camX = cx + Math.sin(victimAngle) * dist;
-      camZ = cz + Math.cos(victimAngle) * dist;
+      const dist = 7 - eased * 5; // 7 → 2 (very close!)
+      const height = 4 - eased * 3.2; // 4 → 0.8 (face level)
+      camX = cx + Math.sin(sideAngle) * dist;
+      camZ = cz + Math.cos(sideAngle) * dist;
       camY = BOARD_SURFACE_Y + height;
-    } else if (phase < 0.20) {
-      // Phase 2: Low angle close-up on victim (hero shot, looking up)
-      const t = (phase - 0.07) / 0.13;
-      const angle = victimAngle + t * 0.15; // slight orbit
-      const dist = 1.5 + Math.sin(t * Math.PI) * 0.15;
-      const height = 0.6 + t * 0.1; // stays low
-      camX = cx + Math.sin(angle) * dist;
-      camZ = cz + Math.cos(angle) * dist;
-      camY = BOARD_SURFACE_Y + height;
-    } else if (phase < 0.32) {
-      // Phase 3: Whip-pan to attacker (over-shoulder)
-      const t = (phase - 0.20) / 0.12;
-      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // ease in-out
-      // Swing angle from victim side to attacker side (~π/2 rotation)
-      const angle = victimAngle + 0.15 + eased * (Math.PI * 0.6);
-      const dist = 1.5 + eased * 0.5; // pull out slightly
-      const height = 0.7 + eased * 0.5;
+    } else if (phase < 0.30) {
+      // Phase 2: Stay close on the faces — VS dialogue, scared victim, attacker taunt
+      const t = (phase - 0.08) / 0.22;
+      const angle = sideAngle + t * 0.2; // very slight drift
+      const dist = 2 + t * 0.3; // 2 → 2.3
+      const height = 0.8 + t * 0.2; // 0.8 → 1.0
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else if (phase < 0.42) {
-      // Phase 4: Pull back showing both + Dutch angle (tension)
-      const t = (phase - 0.32) / 0.10;
-      const angle = victimAngle + 0.15 + Math.PI * 0.6 + t * 0.1;
-      const dist = 2.0 + t * 0.5; // 2.0 → 2.5
-      const height = 1.2;
+      // Phase 3: ZOOM OUT to show both pieces + weapon appears
+      const t = (phase - 0.30) / 0.12;
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const angle = sideAngle + 0.2 + eased * 0.15;
+      const dist = 2.3 + eased * 3.2; // 2.3 → 5.5 (pull way back)
+      const height = 1.0 + eased * 2.0; // 1.0 → 3.0 (rise up)
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
-      // Dutch tilt builds up
-      roll = smoothstep(0.32, 0.40, phase) * 7;
-    } else if (phase < 0.50) {
-      // Phase 5: Quick push-in + shake (impact!)
-      const t = (phase - 0.42) / 0.08;
-      const angle = victimAngle + 0.15 + Math.PI * 0.6 + 0.1;
-      const dist = 2.5 - t * 0.7; // push in 2.5 → 1.8
-      const height = 1.2 - t * 0.3;
+    } else if (phase < 0.55) {
+      // Phase 4: Wide shot for the KILL — weapon swings, victim launched
+      const t = (phase - 0.42) / 0.13;
+      const angle = sideAngle + 0.35 + t * 0.1;
+      const dist = 5.5;
+      const height = 3.0;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
-      // Dutch angle snaps back to 0
-      roll = 7 * (1 - t);
-      // Camera shake
-      const shake = Math.max(0, 1 - t) * 0.06;
-      camX += Math.sin(phase * 200) * shake;
-      camZ += Math.cos(phase * 170) * shake;
-    } else if (phase < 0.66) {
-      // Phase 6: Follow attacker walking onto square (medium shot)
-      const t = (phase - 0.50) / 0.16;
-      const angle = baseAngle + 0.3 + t * 0.25;
-      const dist = 2.2;
-      const height = 0.9;
-      camX = cx + Math.sin(angle) * dist;
-      camZ = cz + Math.cos(angle) * dist;
-      camY = BOARD_SURFACE_Y + height;
-    } else if (phase < 0.80) {
-      // Phase 7: Slow high orbit around attacker (victory lap)
-      const t = (phase - 0.66) / 0.14;
-      const angle = baseAngle + 0.55 + t * 0.5;
-      const dist = 3.0;
-      const height = 2.0;
+      // Camera shake at impact
+      if (phase > 0.43) {
+        const shakeT = (phase - 0.43) / 0.10;
+        const shake = Math.max(0, 1 - shakeT) * 0.08;
+        camX += Math.sin(phase * 200) * shake;
+        camZ += Math.cos(phase * 170) * shake;
+        roll = Math.max(0, 1 - shakeT) * 4;
+      }
+    } else if (phase < 0.78) {
+      // Phase 5: Slow orbit showing attacker victorious (wide)
+      const t = (phase - 0.55) / 0.23;
+      const angle = sideAngle + 0.45 + t * 0.5;
+      const dist = 5.5;
+      const height = 3.0 + t * 0.5;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else {
-      // Phase 8: Pull back toward overview (prepare for return)
-      const t = (phase - 0.80) / 0.20;
+      // Phase 6: Pull back toward overview
+      const t = (phase - 0.78) / 0.22;
       const eased = t * t;
-      const angle = baseAngle + 1.05;
-      const dist = 3.0 + eased * 2.0; // 3 → 5
-      const height = 2.0 + eased * 2.0; // 2 → 4
+      const angle = sideAngle + 0.95;
+      const dist = 5.5 + eased * 2.5; // 5.5 → 8
+      const height = 3.5 + eased * 2.0; // 3.5 → 5.5
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;

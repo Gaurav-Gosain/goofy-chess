@@ -146,6 +146,9 @@ function Scene() {
   // Track pending checkmate (fires after cutscene ends)
   const pendingCheckmateRef = useRef<{ winner: PieceColor; state: GameState } | null>(null);
 
+  // Generation counter to discard stale AI moves after New Game
+  const gameGenRef = useRef(0);
+
   const engineWhiteRef = useRef<StockfishEngine | null>(null);
   const engineBlackRef = useRef<StockfishEngine | null>(null);
 
@@ -598,11 +601,14 @@ function Scene() {
 
     setAiThinking(true);
 
+    const gen = gameGenRef.current;
     const makeAiMove = async () => {
       try {
         const fen = stateToFen(gameState);
         const moveTime = gameMode === 'aivai' ? aiSpeed : 800;
         const uciMove = await engine.getBestMove(fen, moveTime, searchDepth);
+        // Discard if game was reset while AI was thinking
+        if (gameGenRef.current !== gen) return;
         const parsed = parseUciMove(uciMove);
 
         if (parsed) {
@@ -610,13 +616,14 @@ function Scene() {
           const isValid = moves.some(([r, c]) => r === parsed.to[0] && c === parsed.to[1]);
           if (isValid) {
             if (gameMode === 'aivai') await new Promise(r => setTimeout(r, 200));
+            if (gameGenRef.current !== gen) return;
             executeMove(gameState, parsed.from, parsed.to);
           }
         }
       } catch (err) {
         console.error('AI move error:', err);
       } finally {
-        setAiThinking(false);
+        if (gameGenRef.current === gen) setAiThinking(false);
       }
     };
 
@@ -696,6 +703,7 @@ function Scene() {
   }, [replayPlaying, replayMoves, replayIndex, animation, cutscene, checkmateAnim, cameraReturn, replaySpeed, replayStep]);
 
   const handleNewGame = useCallback(() => {
+    gameGenRef.current++;
     setGameState(createInitialState());
     setSelectedSquare(null);
     setValidMoves([]);

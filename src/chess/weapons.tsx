@@ -191,9 +191,9 @@ export function CutsceneWeapon({ weaponType, capturePos, attackAngle, phase }: C
   const behindX = -Math.sin(attackAngle) * 0.4;
   const behindZ = -Math.cos(attackAngle) * 0.4;
 
-  // Raise up then swing down
-  const raiseHeight = 1.2 + raiseT * 0.6;
-  const swingDrop = swingT * 0.8;
+  // Raise up then swing down — keep weapon close to gopher height (~1.0 units tall)
+  const raiseHeight = 0.7 + raiseT * 0.35;
+  const swingDrop = swingT * 0.55;
   const y = BOARD_SURFACE_Y + raiseHeight - swingDrop;
 
   // Swing rotation: weapon tips back then forward

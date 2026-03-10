@@ -52,20 +52,29 @@ function ClassicPieceModel({ type, color }: { type: PieceType; color: PieceColor
     gloss: isWhite ? 0.85 : 0.65,
   });
 
-  // Apply material after Gltf instantiates — use interval to retry until children exist
+  // Apply material continuously until fully loaded, then periodically to prevent resets
   useEffect(() => {
     if (!entityRef.current || !material) return;
     const entity = entityRef.current as PcEntity;
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      if (entity.children.length > 0 || attempts > 20) {
-        applyMaterialToTree(entity, material);
-        clearInterval(interval);
+    let active = true;
+    let frameCount = 0;
+
+    const apply = () => {
+      if (!active) return;
+      applyMaterialToTree(entity, material);
+      frameCount++;
+      // Apply every frame for first 60 frames (~1s), then every 30 frames after
+      if (frameCount < 60) {
+        requestAnimationFrame(apply);
+      } else {
+        // Periodic re-application to prevent any resets
+        setTimeout(() => { if (active) applyMaterialToTree(entity, material); }, 500);
       }
-    }, 50);
-    return () => clearInterval(interval);
-  }, [asset, material, color, type]);
+    };
+
+    requestAnimationFrame(apply);
+    return () => { active = false; };
+  }, [asset, material]);
 
   if (!asset) return null;
 

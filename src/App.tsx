@@ -370,36 +370,36 @@ function Scene() {
       // Phase 1: Quick zoom INTO the faces (close-up for VS anime screen)
       const t = phase / 0.08;
       const eased = t * t;
-      const dist = 7 - eased * 5; // 7 → 2 (very close!)
-      const height = 4 - eased * 3.2; // 4 → 0.8 (face level)
+      const dist = 5 - eased * 3.5; // 5 → 1.5
+      const height = 3 - eased * 2.4; // 3 → 0.6 (face level)
       camX = cx + Math.sin(sideAngle) * dist;
       camZ = cz + Math.cos(sideAngle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else if (phase < 0.30) {
-      // Phase 2: Stay close on the faces — VS dialogue, scared victim, attacker taunt
+      // Phase 2: Stay close on the faces — VS dialogue
       const t = (phase - 0.08) / 0.22;
-      const angle = sideAngle + t * 0.2; // very slight drift
-      const dist = 2 + t * 0.3; // 2 → 2.3
-      const height = 0.8 + t * 0.2; // 0.8 → 1.0
+      const angle = sideAngle + t * 0.15;
+      const dist = 1.5 + t * 0.3; // 1.5 → 1.8
+      const height = 0.6 + t * 0.2; // 0.6 → 0.8
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else if (phase < 0.42) {
-      // Phase 3: ZOOM OUT to show both pieces + weapon appears
+      // Phase 3: Pull back to show both pieces + weapon
       const t = (phase - 0.30) / 0.12;
       const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-      const angle = sideAngle + 0.2 + eased * 0.15;
-      const dist = 2.3 + eased * 3.2; // 2.3 → 5.5 (pull way back)
-      const height = 1.0 + eased * 2.0; // 1.0 → 3.0 (rise up)
+      const angle = sideAngle + 0.15 + eased * 0.15;
+      const dist = 1.8 + eased * 1.7; // 1.8 → 3.5
+      const height = 0.8 + eased * 1.2; // 0.8 → 2.0
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
     } else if (phase < 0.55) {
-      // Phase 4: Wide shot for the KILL — weapon swings, victim launched
+      // Phase 4: Kill shot — medium distance to see weapon swing
       const t = (phase - 0.42) / 0.13;
-      const angle = sideAngle + 0.35 + t * 0.1;
-      const dist = 5.5;
-      const height = 3.0;
+      const angle = sideAngle + 0.30 + t * 0.1;
+      const dist = 3.5;
+      const height = 2.0;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
@@ -412,11 +412,11 @@ function Scene() {
         roll = Math.max(0, 1 - shakeT) * 4;
       }
     } else if (phase < 0.78) {
-      // Phase 5: Slow orbit showing attacker victorious (wide)
+      // Phase 5: Slow orbit, attacker victorious
       const t = (phase - 0.55) / 0.23;
-      const angle = sideAngle + 0.45 + t * 0.5;
-      const dist = 5.5;
-      const height = 3.0 + t * 0.5;
+      const angle = sideAngle + 0.40 + t * 0.4;
+      const dist = 3.5 + t * 0.5; // 3.5 → 4.0
+      const height = 2.0 + t * 0.5;
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
@@ -424,9 +424,9 @@ function Scene() {
       // Phase 6: Pull back toward overview
       const t = (phase - 0.78) / 0.22;
       const eased = t * t;
-      const angle = sideAngle + 0.95;
-      const dist = 5.5 + eased * 2.5; // 5.5 → 8
-      const height = 3.5 + eased * 2.0; // 3.5 → 5.5
+      const angle = sideAngle + 0.80;
+      const dist = 4.0 + eased * 2.0; // 4 → 6
+      const height = 2.5 + eased * 2.0; // 2.5 → 4.5
       camX = cx + Math.sin(angle) * dist;
       camZ = cz + Math.cos(angle) * dist;
       camY = BOARD_SURFACE_Y + height;
@@ -842,7 +842,7 @@ function Scene() {
         <Entity position={camPos} rotation={camRot}>
           <Camera fov={cutscene ? 40 : checkmateAnim ? 38 : responsiveFov} near={0.1} far={100} clearColor={[0.12, 0.14, 0.18, 1]} />
           {!camOverride && (
-            <OrbitControls distance={8.7} distanceMax={50} frameOnStart={false} />
+            <OrbitControls distance={8.7} distanceMin={2} distanceMax={50} frameOnStart={false} />
           )}
         </Entity>
 

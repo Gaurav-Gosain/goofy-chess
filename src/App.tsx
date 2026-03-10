@@ -1,9 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Application, Entity } from '@playcanvas/react';
-import { Camera, Light, Render } from '@playcanvas/react/components';
+import { Camera, Light, Render, Script } from '@playcanvas/react/components';
 import { useMaterial } from '@playcanvas/react/hooks';
-import { OrbitControls } from '@playcanvas/react/scripts';
-import { FILLMODE_FILL_WINDOW, RESOLUTION_AUTO } from 'playcanvas';
+import { CameraControls, FILLMODE_FILL_WINDOW, RESOLUTION_AUTO } from 'playcanvas';
 
 import {
   createInitialState, getValidMoves, makeMove, stateToFen, parseUciMove,
@@ -861,12 +860,7 @@ function Scene() {
         <Entity position={camPos} rotation={camRot}>
           <Camera fov={cutscene ? 40 : checkmateAnim ? 38 : responsiveFov} near={0.1} far={100} clearColor={[0.12, 0.14, 0.18, 1]} />
           {!camOverride && (
-            <OrbitControls
-              distanceMin={5} distanceMax={50}
-              pitchAngleMin={10} pitchAngleMax={85}
-              inertiaFactor={0.15} frameOnStart={false}
-              distance={8.7}
-            />
+            <Script script={CameraControls} />
           )}
         </Entity>
 

@@ -15,7 +15,7 @@ export class StockfishEngine {
     if (this.worker) return;
 
     return new Promise<void>((resolve, reject) => {
-      this.worker = new Worker('/stockfish/stockfish.js');
+      this.worker = new Worker('./stockfish/stockfish.js');
 
       this.worker.onmessage = (e: MessageEvent) => {
         const line = typeof e.data === 'string' ? e.data : '';

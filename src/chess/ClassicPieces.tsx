@@ -4,14 +4,14 @@ import { useModel, useMaterial } from '@playcanvas/react/hooks';
 import type { PieceColor, PieceType } from './engine';
 import type { Entity as PcEntity, StandardMaterial } from 'playcanvas';
 
-// GLB model URLs served from /assets/chess/
+// GLB model URLs served from ./assets/chess/
 const MODEL_URLS: Record<PieceType, string> = {
-  king: '/assets/chess/King.glb',
-  queen: '/assets/chess/Queen.glb',
-  bishop: '/assets/chess/Bishop.glb',
-  knight: '/assets/chess/Knight.glb',
-  rook: '/assets/chess/Rook.glb',
-  pawn: '/assets/chess/Pawn.glb',
+  king: './assets/chess/King.glb',
+  queen: './assets/chess/Queen.glb',
+  bishop: './assets/chess/Bishop.glb',
+  knight: './assets/chess/Knight.glb',
+  rook: './assets/chess/Rook.glb',
+  pawn: './assets/chess/Pawn.glb',
 };
 
 // Scale factors per piece type — models are very small, need large scale

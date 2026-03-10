@@ -187,9 +187,13 @@ export function CutsceneWeapon({ weaponType, capturePos, attackAngle, phase }: C
 
   if (appear <= 0.01 || fadeT >= 0.99) return null;
 
-  // Position: slightly behind and above the capture point
-  const behindX = -Math.sin(attackAngle) * 0.4;
-  const behindZ = -Math.cos(attackAngle) * 0.4;
+  // Follow attacker's walk-forward after the hit so weapon doesn't clip through
+  const walkT = smoothstep(0.50, 0.66, phase);
+  // Attacker starts 0.8 behind capture point, walks to 0. Weapon stays ~0.4 behind attacker.
+  const attackerBehind = 0.8 * (1 - walkT);
+  const weaponBehind = attackerBehind + 0.1; // slightly behind the attacker
+  const behindX = -Math.sin(attackAngle) * weaponBehind;
+  const behindZ = -Math.cos(attackAngle) * weaponBehind;
 
   // Raise up then swing down — keep weapon close to gopher height (~1.0 units tall)
   const raiseHeight = 0.7 + raiseT * 0.35;

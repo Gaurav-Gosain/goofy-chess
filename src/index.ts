@@ -6,6 +6,7 @@ const STOCKFISH_DIR = resolve(import.meta.dir, "../node_modules/stockfish/bin");
 const CHESS_ASSETS_DIR = resolve(import.meta.dir, "chess/assets");
 
 const WEAPON_ASSETS_DIR = resolve(import.meta.dir, "chess/assets/weapons");
+const SOUND_ASSETS_DIR = resolve(import.meta.dir, "chess/assets/sounds");
 
 function serveGlb(filename: string) {
   const file = Bun.file(resolve(CHESS_ASSETS_DIR, filename));
@@ -18,6 +19,13 @@ function serveWeaponGlb(filename: string) {
   const file = Bun.file(resolve(WEAPON_ASSETS_DIR, filename));
   return new Response(file, {
     headers: { "Content-Type": "model/gltf-binary" },
+  });
+}
+
+function serveSound(filename: string) {
+  const file = Bun.file(resolve(SOUND_ASSETS_DIR, filename));
+  return new Response(file, {
+    headers: { "Content-Type": "audio/mpeg" },
   });
 }
 
@@ -57,6 +65,19 @@ const server = serve({
     "/assets/weapons/blaster-h.glb": () => serveWeaponGlb("blaster-h.glb"),
     "/assets/weapons/blaster-k.glb": () => serveWeaponGlb("blaster-k.glb"),
     "/assets/weapons/blaster-n.glb": () => serveWeaponGlb("blaster-n.glb"),
+
+    // Serve meme sound effects
+    "/assets/sounds/vine-boom.mp3": () => serveSound("vine-boom.mp3"),
+    "/assets/sounds/air-horn.mp3": () => serveSound("air-horn.mp3"),
+    "/assets/sounds/bonk.mp3": () => serveSound("bonk.mp3"),
+    "/assets/sounds/sad-trombone.mp3": () => serveSound("sad-trombone.mp3"),
+    "/assets/sounds/bruh.mp3": () => serveSound("bruh.mp3"),
+    "/assets/sounds/oof.mp3": () => serveSound("oof.mp3"),
+    "/assets/sounds/dramatic.mp3": () => serveSound("dramatic.mp3"),
+    "/assets/sounds/victory.mp3": () => serveSound("victory.mp3"),
+    "/assets/sounds/explosion.mp3": () => serveSound("explosion.mp3"),
+    "/assets/sounds/gunshot.mp3": () => serveSound("gunshot.mp3"),
+    "/assets/sounds/faaah.mp3": () => serveSound("faaah.mp3"),
   },
 
   // Fallback: serve index.html for SPA routing

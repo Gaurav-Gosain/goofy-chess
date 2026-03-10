@@ -432,11 +432,15 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
   const posX = fx + (cx - fx) * walkT;
   const posZ = fz + (cz - fz) * walkT;
 
-  // Blaster held at side, slightly forward
-  const holdOffsetX = Math.sin(attackAngle) * 0.2;
-  const holdOffsetZ = Math.cos(attackAngle) * 0.2;
+  // Blaster held at side, offset to the right of the attacker
+  const sideAngle = attackAngle + Math.PI * 0.5;
+  const holdOffsetX = Math.sin(attackAngle) * 0.15 + Math.sin(sideAngle) * 0.15;
+  const holdOffsetZ = Math.cos(attackAngle) * 0.15 + Math.cos(sideAngle) * 0.15;
   const holdY = BOARD_SURFACE_Y + 0.45;
 
+  // Blaster faces from attacker toward victim
+  // attackAngle = atan2(dx, dz) in world space, GLB models point along +Z by default
+  // so facingYaw = attackAngle in degrees makes the model face toward the victim
   const facingYaw = attackAngle * (180 / Math.PI);
 
   // Recoil kick backwards
@@ -455,7 +459,7 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
       {appear > 0.01 && fadeT < 0.99 && (
         <Entity
           position={[posX + holdOffsetX + recoilX, holdY, posZ + holdOffsetZ + recoilZ]}
-          rotation={[-restPitch, facingYaw + 90, 0]}
+          rotation={[-restPitch, facingYaw, 0]}
           scale={[scale, scale, scale]}
         >
           <WeaponModel type={weaponDef.type as Blaster3D} />

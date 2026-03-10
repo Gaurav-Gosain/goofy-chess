@@ -17,6 +17,7 @@ import { CutsceneOverlay } from './chess/CutsceneOverlay';
 import { CheckmateOverlay } from './chess/CheckmateOverlay';
 import { StockfishEngine } from './chess/stockfish';
 import { createReplayState, type ParsedMove } from './chess/pgn';
+import { memeAudio } from './chess/sounds';
 
 import './index.css';
 
@@ -117,6 +118,9 @@ function Scene() {
   const [searchDepth, setSearchDepth] = useState(0);
   const [cinematicCaptures, setCinematicCaptures] = useState(true);
   const [pieceStyle, setPieceStyle] = useState<PieceStyle>('gopher');
+
+  // Preload meme sounds on mount
+  useEffect(() => { memeAudio.preload(); }, []);
 
   // PGN Replay state
   const [replayMoves, setReplayMoves] = useState<ParsedMove[] | null>(null);
@@ -1100,6 +1104,7 @@ function Scene() {
           onSkip={skipCutscene}
           weaponName={cutscene.weaponName}
           weaponEmoji={cutscene.weaponEmoji}
+          isRanged={cutscene.weaponCategory === 'ranged'}
         />
       )}
 

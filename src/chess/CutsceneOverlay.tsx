@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { PieceType, PieceColor } from './engine';
+import { memeAudio } from './sounds';
 
 // ---- Dialogue arrays ----
 
@@ -103,6 +104,51 @@ const KILL_VERBS = [
   'YEETED INTO ORBIT', 'REDUCED TO ATOMS',
 ];
 
+// === MEME OVERLAYS ===
+
+// Impact meme texts (shown at hit moment)
+const IMPACT_MEMES = [
+  'EMOTIONAL DAMAGE',
+  'WASTED',
+  'FATALITY',
+  'BOOM HEADSHOT',
+  'CRITICAL HIT',
+  'K.O.',
+  'OVERKILL',
+  'ULTRA KILL',
+  'GET REKT',
+  'SKILL ISSUE',
+  'NO SCOPE',
+  'RATIO + L',
+  'COPE',
+  'SEETHE',
+  'SKILL DIFF',
+];
+
+// Post-kill meme texts
+const POST_KILL_MEMES = [
+  'Press F to pay respects',
+  'gg ez no re',
+  'Skill issue tbh',
+  'Sent to the backrooms',
+  'Bro got folded',
+  'That was personal',
+  'Violated the Geneva Convention',
+  'Bro rage quit life',
+  'Certified hood classic',
+  'Bro got ratio\'d irl',
+  'Main character energy',
+  'Absolutely maidenless behavior',
+  'Bro got isekai\'d',
+];
+
+// MLG / Doritos / Mountain Dew style effects
+const MLG_TEXTS = [
+  '360 NO SCOPE', 'MLG PRO', 'WOMBO COMBO',
+  'MOM GET THE CAMERA', 'OH BABY A TRIPLE',
+  'AIRHORN.EXE', 'xXx_PR0_xXx',
+];
+
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
@@ -139,11 +185,12 @@ interface CutsceneOverlayProps {
   onSkip: () => void;
   weaponName: string;
   weaponEmoji: string;
+  isRanged: boolean;
 }
 
 export function CutsceneOverlay({
   attackerType, attackerColor, victimType, victimColor, phase, onSkip,
-  weaponName, weaponEmoji,
+  weaponName, weaponEmoji, isRanged,
 }: CutsceneOverlayProps) {
   const [victimScared] = useState(() =>
     VICTIM_SCARED[Math.floor(Math.random() * VICTIM_SCARED.length)]
@@ -158,6 +205,68 @@ export function CutsceneOverlay({
   const [killVerb] = useState(() =>
     KILL_VERBS[Math.floor(Math.random() * KILL_VERBS.length)]
   );
+
+  // Meme text selections (stable per cutscene)
+  const [impactMeme] = useState(() =>
+    IMPACT_MEMES[Math.floor(Math.random() * IMPACT_MEMES.length)]
+  );
+  const [postKillMeme] = useState(() =>
+    POST_KILL_MEMES[Math.floor(Math.random() * POST_KILL_MEMES.length)]
+  );
+  const [mlgText] = useState(() =>
+    MLG_TEXTS[Math.floor(Math.random() * MLG_TEXTS.length)]
+  );
+  // Randomize which meme combo we show (keeps it fresh)
+  const [memeVariant] = useState(() => Math.floor(Math.random() * 5));
+
+  // Hitmarker positions (randomized)
+  const hitmarkerPositions = useMemo(() => {
+    const positions: { x: number; y: number; rot: number; scale: number }[] = [];
+    for (let i = 0; i < 3; i++) {
+      positions.push({
+        x: 45 + Math.random() * 10,
+        y: 40 + Math.random() * 20,
+        rot: Math.random() * 45 - 22.5,
+        scale: 0.8 + Math.random() * 0.6,
+      });
+    }
+    return positions;
+  }, []);
+
+  // Sound effect triggers
+  const soundPhaseRef = useRef({ dramatic: false, blaster: false, impact: false, victim: false, hype: false });
+  useEffect(() => {
+    memeAudio.preload();
+  }, []);
+
+  useEffect(() => {
+    const sp = soundPhaseRef.current;
+    // Dramatic stinger at showdown
+    if (phase >= 0.03 && !sp.dramatic) {
+      sp.dramatic = true;
+      memeAudio.playDramatic();
+    }
+    // Blaster fire for ranged
+    if (isRanged && phase >= 0.30 && !sp.blaster) {
+      sp.blaster = true;
+      memeAudio.playBlasterFire();
+    }
+    // Impact sound at hit
+    if (phase >= 0.43 && !sp.impact) {
+      sp.impact = true;
+      memeAudio.playImpact(isRanged);
+    }
+    // Victim reaction after impact
+    if (phase >= 0.50 && !sp.victim) {
+      sp.victim = true;
+      memeAudio.playVictimReaction();
+    }
+    // Hype sound on kill confirmation
+    if (phase >= 0.56 && !sp.hype) {
+      sp.hype = true;
+      memeAudio.playHype();
+    }
+  }, [phase, isRanged]);
 
   const speedLines = useMemo(() => generateSpeedLines(24), []);
 
@@ -485,6 +594,229 @@ export function CutsceneOverlay({
           {' '}{weaponEmoji}{' '}
           <span style={{ color: victimCol, fontWeight: 700 }}>{victimName}</span>
         </div>
+      )}
+
+      {/* === MEME OVERLAYS === */}
+
+      {/* BIG HITMARKER CROSSHAIR at center on impact */}
+      {impactOp > 0.03 && (
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%',
+          transform: `translate(-50%, -50%) scale(${1.5 + impactOp * 1.5})`,
+          opacity: impactOp * masterFade,
+          pointerEvents: 'none',
+        }}>
+          <div style={{ width: '60px', height: '60px', position: 'relative' }}>
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              width: '40px', height: '5px', background: '#fff',
+              transform: 'translate(-50%, -50%) rotate(45deg)',
+              boxShadow: '0 0 15px #ff0000, 0 0 30px #ff000066',
+            }} />
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              width: '40px', height: '5px', background: '#fff',
+              transform: 'translate(-50%, -50%) rotate(-45deg)',
+              boxShadow: '0 0 15px #ff0000, 0 0 30px #ff000066',
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Extra hitmarkers scattered */}
+      {impactOp > 0.03 && hitmarkerPositions.map((pos, i) => (
+        <div key={`hitmarker-${i}`} style={{
+          position: 'absolute',
+          left: `${pos.x}%`, top: `${pos.y}%`,
+          transform: `translate(-50%, -50%) rotate(${pos.rot}deg) scale(${pos.scale * (1 + impactOp)})`,
+          opacity: impactOp * 0.8 * masterFade,
+          pointerEvents: 'none',
+        }}>
+          <div style={{ width: '40px', height: '40px', position: 'relative' }}>
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              width: '28px', height: '4px', background: '#fff',
+              transform: 'translate(-50%, -50%) rotate(45deg)',
+              boxShadow: '0 0 10px #ff0000',
+            }} />
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              width: '28px', height: '4px', background: '#fff',
+              transform: 'translate(-50%, -50%) rotate(-45deg)',
+              boxShadow: '0 0 10px #ff0000',
+            }} />
+          </div>
+        </div>
+      ))}
+
+      {/* IMPACT MEME TEXT — always shown, big and bold */}
+      {impactOp > 0.01 && (
+        <div style={{
+          position: 'absolute',
+          top: impactMeme === 'WASTED' ? '35%' : '56%',
+          left: '50%',
+          transform: `translate(-50%, -50%) scale(${0.3 + impactOp * 1.2})`,
+          fontFamily: "'Impact', 'Arial Black', sans-serif",
+          fontSize: impactMeme === 'WASTED' ? '80px' : '48px',
+          fontWeight: 900,
+          color: impactMeme === 'WASTED' ? '#ff0000' : '#ffee00',
+          letterSpacing: impactMeme === 'WASTED' ? '14px' : '6px',
+          textShadow: impactMeme === 'WASTED'
+            ? '0 0 40px #ff0000, 0 0 80px #ff000088, 0 4px 12px rgba(0,0,0,1), 0 0 120px #ff000044'
+            : '0 0 30px #ff6600, 0 0 60px #ff660088, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, 0 4px 12px rgba(0,0,0,1)',
+          opacity: impactOp * masterFade,
+          whiteSpace: 'nowrap',
+          textTransform: 'uppercase',
+          zIndex: 10,
+        }}>
+          {impactMeme}
+        </div>
+      )}
+
+      {/* MLG spinning text at impact — always shown */}
+      {impactOp > 0.02 && (
+        <div style={{
+          position: 'absolute', top: '22%', right: '6%',
+          opacity: impactOp * masterFade * 0.9,
+          transform: `rotate(${impactOp * 720}deg) scale(${0.2 + impactOp * 1.2})`,
+          fontFamily: "'Impact', 'Arial Black', sans-serif",
+          fontSize: '28px', fontWeight: 900,
+          color: '#00ff00',
+          textShadow: '0 0 20px #00ff00, 0 0 40px #00ff0088, 3px 3px 0 #000',
+          letterSpacing: '3px',
+          whiteSpace: 'nowrap',
+        }}>
+          {mlgText}
+        </div>
+      )}
+
+      {/* DEAL WITH IT SUNGLASSES sliding down on victory */}
+      {victoryOp > 0.01 && (
+        <div style={{
+          position: 'absolute',
+          top: `${14 + smoothstep(0.52, 0.62, phase) * 10}%`,
+          left: '12%',
+          opacity: victoryOp * masterFade,
+          transform: `translateY(${(1 - smoothstep(0.52, 0.58, phase)) * -60}px) scale(1.4)`,
+          pointerEvents: 'none',
+          zIndex: 10,
+        }}>
+          <div style={{
+            fontFamily: "'Courier New', monospace",
+            fontSize: '18px',
+            color: '#000',
+            background: 'linear-gradient(180deg, #111 60%, #333 100%)',
+            padding: '6px 20px',
+            borderRadius: '2px',
+            border: '3px solid #000',
+            letterSpacing: '-1px',
+            lineHeight: 1,
+            whiteSpace: 'pre',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.8)',
+          }}>
+            {'  \u2588\u2588  \u2588\u2588  '}
+            {'\n'}
+            {'\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588'}
+          </div>
+        </div>
+      )}
+
+      {/* "Press F to pay respects" — post kill, always shown */}
+      {killFeedOp > 0.05 && (
+        <div style={{
+          position: 'absolute', bottom: '22%', left: '50%',
+          transform: 'translateX(-50%)',
+          opacity: killFeedOp * masterFade * 0.85,
+          fontFamily: "'Segoe UI', system-ui, sans-serif",
+          fontSize: '16px', color: 'rgba(255,255,255,0.8)',
+          background: 'rgba(0,0,0,0.7)',
+          padding: '10px 24px', borderRadius: '6px',
+          backdropFilter: 'blur(8px)',
+          letterSpacing: '1px',
+          border: '1px solid rgba(255,255,255,0.15)',
+          zIndex: 10,
+        }}>
+          <span style={{
+            color: '#fff', fontSize: '14px',
+            border: '2px solid #888', padding: '3px 10px',
+            borderRadius: '4px', marginRight: '10px',
+            background: 'rgba(255,255,255,0.1)',
+            fontWeight: 700,
+          }}>F</span>
+          {postKillMeme}
+        </div>
+      )}
+
+      {/* LENS FLARES at impact — big and bright */}
+      {impactOp > 0.03 && (
+        <>
+          <div style={{
+            position: 'absolute', top: '45%', left: '50%',
+            width: `${impactOp * 400}px`, height: `${impactOp * 400}px`,
+            background: 'radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,200,50,0.3) 25%, transparent 65%)',
+            borderRadius: '50%',
+            transform: 'translate(-50%, -50%)',
+            opacity: impactOp * 0.7 * masterFade,
+            mixBlendMode: 'screen',
+            pointerEvents: 'none',
+          }} />
+          <div style={{
+            position: 'absolute', top: '35%', left: '55%',
+            width: `${impactOp * 150}px`, height: `${impactOp * 150}px`,
+            background: 'radial-gradient(circle, rgba(100,200,255,0.6) 0%, transparent 65%)',
+            borderRadius: '50%',
+            transform: 'translate(-50%, -50%)',
+            opacity: impactOp * 0.5 * masterFade,
+            mixBlendMode: 'screen',
+            pointerEvents: 'none',
+          }} />
+          {/* Horizontal lens flare streak */}
+          <div style={{
+            position: 'absolute', top: '48%', left: '0',
+            width: '100%', height: `${impactOp * 8}px`,
+            background: 'linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.3) 40%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0.3) 60%, transparent 90%)',
+            opacity: impactOp * 0.5 * masterFade,
+            mixBlendMode: 'screen',
+            pointerEvents: 'none',
+          }} />
+        </>
+      )}
+
+      {/* COMBO COUNTER — big and prominent */}
+      {killOp > 0.01 && (
+        <div style={{
+          position: 'absolute', top: '6%', right: '4%',
+          opacity: killOp * masterFade,
+          fontFamily: "'Impact', 'Arial Black', sans-serif",
+          textAlign: 'right',
+        }}>
+          <div style={{
+            fontSize: '52px', fontWeight: 900,
+            color: '#ff4444',
+            textShadow: '0 0 20px #ff0000, 0 0 40px #ff000066, 3px 3px 0 #000',
+            letterSpacing: '2px',
+          }}>
+            +100
+          </div>
+          <div style={{
+            fontSize: '14px', color: '#ffaa00',
+            letterSpacing: '6px', marginTop: '-6px',
+            textShadow: '2px 2px 0 #000',
+            fontWeight: 900,
+          }}>
+            POINTS
+          </div>
+        </div>
+      )}
+
+      {/* RED SCREEN TINT on impact (GTA wasted style) */}
+      {impactMeme === 'WASTED' && impactOp > 0.01 && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(80, 0, 0, 0.4)',
+          opacity: impactOp * masterFade,
+          pointerEvents: 'none',
+        }} />
       )}
 
       {/* Skip hint */}

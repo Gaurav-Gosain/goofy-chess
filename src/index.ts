@@ -66,7 +66,7 @@ const server = serve({
     "/assets/weapons/blaster-k.glb": () => serveWeaponGlb("blaster-k.glb"),
     "/assets/weapons/blaster-n.glb": () => serveWeaponGlb("blaster-n.glb"),
 
-    // Serve meme sound effects
+    // Serve meme sound effects (wildcard-ish: serve any mp3 from sounds dir)
     "/assets/sounds/vine-boom.mp3": () => serveSound("vine-boom.mp3"),
     "/assets/sounds/air-horn.mp3": () => serveSound("air-horn.mp3"),
     "/assets/sounds/bonk.mp3": () => serveSound("bonk.mp3"),
@@ -78,6 +78,41 @@ const server = serve({
     "/assets/sounds/explosion.mp3": () => serveSound("explosion.mp3"),
     "/assets/sounds/gunshot.mp3": () => serveSound("gunshot.mp3"),
     "/assets/sounds/faaah.mp3": () => serveSound("faaah.mp3"),
+    // New reaction sounds
+    "/assets/sounds/sheesh.mp3": () => serveSound("sheesh.mp3"),
+    "/assets/sounds/sus.mp3": () => serveSound("sus.mp3"),
+    "/assets/sounds/wow.mp3": () => serveSound("wow.mp3"),
+    "/assets/sounds/nani.mp3": () => serveSound("nani.mp3"),
+    "/assets/sounds/rizz.mp3": () => serveSound("rizz.mp3"),
+    "/assets/sounds/emotional-damage.mp3": () => serveSound("emotional-damage.mp3"),
+    "/assets/sounds/john-cena.mp3": () => serveSound("john-cena.mp3"),
+    "/assets/sounds/wilhelm.mp3": () => serveSound("wilhelm.mp3"),
+    "/assets/sounds/metal-pipe.mp3": () => serveSound("metal-pipe.mp3"),
+    "/assets/sounds/windows-error.mp3": () => serveSound("windows-error.mp3"),
+    "/assets/sounds/taco-bell.mp3": () => serveSound("taco-bell.mp3"),
+    "/assets/sounds/record-scratch.mp3": () => serveSound("record-scratch.mp3"),
+    // Movement sounds
+    "/assets/sounds/boing.mp3": () => serveSound("boing.mp3"),
+    "/assets/sounds/whoosh.mp3": () => serveSound("whoosh.mp3"),
+    "/assets/sounds/fart.mp3": () => serveSound("fart.mp3"),
+    "/assets/sounds/pop.mp3": () => serveSound("pop.mp3"),
+    "/assets/sounds/dun-dun-dun.mp3": () => serveSound("dun-dun-dun.mp3"),
+    "/assets/sounds/tada.mp3": () => serveSound("tada.mp3"),
+    "/assets/sounds/doge-bonk.mp3": () => serveSound("doge-bonk.mp3"),
+    "/assets/sounds/yeet.mp3": () => serveSound("yeet.mp3"),
+    // Desi sounds
+    "/assets/sounds/modi-mitron.mp3": () => serveSound("modi-mitron.mp3"),
+    "/assets/sounds/achhe-din.mp3": () => serveSound("achhe-din.mp3"),
+    "/assets/sounds/bollywood-drama.mp3": () => serveSound("bollywood-drama.mp3"),
+    "/assets/sounds/dhol.mp3": () => serveSound("dhol.mp3"),
+    "/assets/sounds/jai-shree-ram.mp3": () => serveSound("jai-shree-ram.mp3"),
+    "/assets/sounds/tv-serial-shock.mp3": () => serveSound("tv-serial-shock.mp3"),
+    "/assets/sounds/kya-ho-raha-hai.mp3": () => serveSound("kya-ho-raha-hai.mp3"),
+    "/assets/sounds/thalaiva.mp3": () => serveSound("thalaiva.mp3"),
+    "/assets/sounds/bahut-hard.mp3": () => serveSound("bahut-hard.mp3"),
+    "/assets/sounds/ipl-sixer.mp3": () => serveSound("ipl-sixer.mp3"),
+    "/assets/sounds/auto-horn.mp3": () => serveSound("auto-horn.mp3"),
+    "/assets/sounds/item-song.mp3": () => serveSound("item-song.mp3"),
   },
 
   // Fallback: serve index.html for SPA routing

@@ -1,5 +1,6 @@
 import type { GameState, PieceType } from './engine';
 import type { PieceStyle } from './pieces';
+import type { MemeMode } from './sounds';
 import { ReplayPanel } from './ReplayPanel';
 
 const PIECE_SYMBOLS: Record<PieceType, string> = {
@@ -24,6 +25,8 @@ interface GameUIProps {
   onCinematicCapturesChange: (enabled: boolean) => void;
   pieceStyle: PieceStyle;
   onPieceStyleChange: (style: PieceStyle) => void;
+  memeMode: MemeMode;
+  onMemeModeChange: (mode: MemeMode) => void;
   // Replay
   onLoadPgn: (pgn: string) => void;
   onStopReplay: () => void;
@@ -77,6 +80,7 @@ export function GameUI({
   searchDepth, onSearchDepthChange,
   cinematicCaptures, onCinematicCapturesChange,
   pieceStyle, onPieceStyleChange,
+  memeMode, onMemeModeChange,
   onLoadPgn, onStopReplay, isReplaying, replayIndex, replayTotal,
   isReplayPlaying, onToggleReplayPlay, onReplayStep, onReplayStepBack,
   replaySpeed, onReplaySpeedChange,
@@ -168,6 +172,13 @@ export function GameUI({
           style={pill}
         >
           Pieces: {pieceStyle === 'gopher' ? 'Gopher' : 'Classic'}
+        </button>
+
+        <button
+          onClick={() => onMemeModeChange(memeMode === 'normal' ? 'desi' : 'normal')}
+          style={memeMode === 'desi' ? pillActive : pill}
+        >
+          {memeMode === 'desi' ? 'Desi Mode ON' : 'Desi Mode OFF'}
         </button>
 
         {showAiControls && (

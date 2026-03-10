@@ -182,18 +182,16 @@ for (const file of [
 }
 console.log("📦 Copied weapon GLB models");
 
-// Meme sound effects
+// Meme sound effects — copy all mp3 files from sounds directory
 const soundAssetsDir = path.join(outdirStr, "assets", "sounds");
 mkdirSync(soundAssetsDir, { recursive: true });
 const srcSoundAssets = path.resolve("src", "chess", "assets", "sounds");
-for (const file of [
-  "vine-boom.mp3", "air-horn.mp3", "bonk.mp3", "sad-trombone.mp3",
-  "bruh.mp3", "oof.mp3", "dramatic.mp3", "victory.mp3",
-  "explosion.mp3", "gunshot.mp3", "faaah.mp3",
-]) {
+let soundCount = 0;
+for (const file of new Bun.Glob("*.mp3").scanSync(srcSoundAssets)) {
   copyFileSync(path.join(srcSoundAssets, file), path.join(soundAssetsDir, file));
+  soundCount++;
 }
-console.log("📦 Copied meme sound effects");
+console.log(`📦 Copied ${soundCount} meme sound effects`);
 
 // Stockfish WASM engine
 const stockfishOutDir = path.join(outdirStr, "stockfish");

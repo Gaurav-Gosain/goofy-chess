@@ -17,7 +17,8 @@ import { CutsceneOverlay } from './chess/CutsceneOverlay';
 import { CheckmateOverlay } from './chess/CheckmateOverlay';
 import { StockfishEngine } from './chess/stockfish';
 import { createReplayState, type ParsedMove } from './chess/pgn';
-import { memeAudio } from './chess/sounds';
+import { memeAudio, type MemeMode } from './chess/sounds';
+import { getMoveCommentary, MoveToast } from './chess/MoveCommentary';
 
 import './index.css';
 
@@ -118,9 +119,16 @@ function Scene() {
   const [searchDepth, setSearchDepth] = useState(0);
   const [cinematicCaptures, setCinematicCaptures] = useState(true);
   const [pieceStyle, setPieceStyle] = useState<PieceStyle>('gopher');
+  const [memeMode, setMemeMode] = useState<MemeMode>('normal');
+
+  // Move commentary toast
+  const [moveToast, setMoveToast] = useState<{ text: string; color: string; visible: boolean }>({ text: '', color: 'white', visible: false });
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Preload meme sounds on mount
   useEffect(() => { memeAudio.preload(); }, []);
+  // Sync meme mode
+  useEffect(() => { memeAudio.mode = memeMode; }, [memeMode]);
 
   // PGN Replay state
   const [replayMoves, setReplayMoves] = useState<ParsedMove[] | null>(null);
@@ -705,6 +713,23 @@ function Scene() {
     const target = state.board[to[0]][to[1]];
     const newState = makeMove(state, from, to);
 
+    // Play move sound (goofy sounds on every move)
+    memeAudio.playMove();
+
+    // Show move commentary toast (not for captures — those get cutscenes)
+    if (!target) {
+      const isCheck = newState.status === 'check';
+      const commentary = getMoveCommentary(piece.type, isCheck, memeMode);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setMoveToast({ text: commentary, color: piece.color, visible: true });
+      toastTimerRef.current = setTimeout(() => {
+        setMoveToast(prev => ({ ...prev, visible: false }));
+      }, 2500);
+
+      // Play check sound
+      if (isCheck) memeAudio.playCheck();
+    }
+
     setAnimation({
       pieceType: piece.type,
       pieceColor: piece.color,
@@ -719,7 +744,7 @@ function Scene() {
 
     setSelectedSquare(null);
     setValidMoves([]);
-  }, []);
+  }, [memeMode]);
 
   // AI move logic
   useEffect(() => {
@@ -1105,6 +1130,7 @@ function Scene() {
           weaponName={cutscene.weaponName}
           weaponEmoji={cutscene.weaponEmoji}
           isRanged={cutscene.weaponCategory === 'ranged'}
+          memeMode={memeMode}
         />
       )}
 
@@ -1115,6 +1141,11 @@ function Scene() {
           phase={checkmateAnim.phase}
           onSkip={skipCutscene}
         />
+      )}
+
+      {/* Move commentary toast */}
+      {!anyOverlay && (
+        <MoveToast text={moveToast.text} color={moveToast.color} visible={moveToast.visible} />
       )}
 
       {/* Game UI (hidden during cutscene/checkmate) */}
@@ -1129,6 +1160,8 @@ function Scene() {
           onCinematicCapturesChange={setCinematicCaptures}
           pieceStyle={pieceStyle}
           onPieceStyleChange={setPieceStyle}
+          memeMode={memeMode}
+          onMemeModeChange={setMemeMode}
           // Replay props
           onLoadPgn={handleLoadPgn}
           onStopReplay={stopReplay}

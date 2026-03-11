@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { Entity } from '@playcanvas/react';
 import { Render } from '@playcanvas/react/components';
 import { useMaterial } from '@playcanvas/react/hooks';

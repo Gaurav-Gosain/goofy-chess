@@ -54,6 +54,8 @@ const server = serve({
     "/assets/chess/Knight.glb": () => serveGlb("Knight.glb"),
     "/assets/chess/Rook.glb": () => serveGlb("Rook.glb"),
     "/assets/chess/Pawn.glb": () => serveGlb("Pawn.glb"),
+    "/assets/chess/gopher.glb": () => serveGlb("gopher.glb"),
+    "/assets/chess/crown.glb": () => serveGlb("crown.glb"),
 
     // Serve weapon GLB models
     "/assets/weapons/sword.glb": () => serveWeaponGlb("sword.glb"),

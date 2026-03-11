@@ -164,7 +164,7 @@ const outdirStr = typeof outdir === 'string' ? outdir : path.join(process.cwd(),
 const chessAssetsDir = path.join(outdirStr, "assets", "chess");
 mkdirSync(chessAssetsDir, { recursive: true });
 const srcChessAssets = path.resolve("src", "chess", "assets");
-for (const file of ["King.glb", "Queen.glb", "Bishop.glb", "Knight.glb", "Rook.glb", "Pawn.glb"]) {
+for (const file of ["King.glb", "Queen.glb", "Bishop.glb", "Knight.glb", "Rook.glb", "Pawn.glb", "gopher.glb", "crown.glb"]) {
   copyFileSync(path.join(srcChessAssets, file), path.join(chessAssetsDir, file));
 }
 console.log("📦 Copied chess piece GLB models");

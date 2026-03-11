@@ -1,7 +1,9 @@
-import { Entity } from '@playcanvas/react';
+import { useEffect, useRef, useState } from 'react';
+import { Entity, Gltf } from '@playcanvas/react';
 import { Render, Script } from '@playcanvas/react/components';
-import { useMaterial } from '@playcanvas/react/hooks';
+import { useMaterial, useModel } from '@playcanvas/react/hooks';
 import { Script as PcScript } from 'playcanvas';
+import type { Entity as PcEntity, StandardMaterial } from 'playcanvas';
 import type { PieceColor, PieceType, Pos } from './engine';
 import { CLASSIC_PIECE_COMPONENTS, ClassicKing } from './ClassicPieces';
 
@@ -9,7 +11,7 @@ export type PieceStyle = 'gopher' | 'classic';
 
 // ---- Goofy idle animation script ----
 class GopherIdle extends PcScript {
-  static scriptName = 'gopherIdle';
+  static override scriptName = 'gopherIdle';
   time = 0;
   baseY = 0;
   baseRotY = 0;
@@ -109,7 +111,7 @@ class GopherIdle extends PcScript {
 
 // ---- Blink animation script (attached to eye entities) ----
 class EyeBlink extends PcScript {
-  static scriptName = 'eyeBlink';
+  static override scriptName = 'eyeBlink';
   time = 0;
   nextBlink = 0;
   isBlinking = false;
@@ -155,7 +157,7 @@ class EyeBlink extends PcScript {
 
 // Second eye with offset timing for winks
 class EyeBlinkAlt extends PcScript {
-  static scriptName = 'eyeBlinkAlt';
+  static override scriptName = 'eyeBlinkAlt';
   time = 0;
   nextBlink = 0;
   isBlinking = false;
@@ -235,97 +237,295 @@ function useGopherMaterials(color: PieceColor) {
   return { body, belly, eyeWhite, pupil, nose, tooth, accent, gold };
 }
 
-// Base gopher shape shared by all pieces
-function GopherBase({ color, scale = 1 }: { color: PieceColor; scale?: number }) {
-  const m = useGopherMaterials(color);
-  const s = scale;
+// ---- GLB Gopher model with team color tinting ----
+
+const GOPHER_GLB_URL = './assets/chess/gopher.glb';
+const CROWN_GLB_URL = './assets/chess/crown.glb';
+
+// Tint all meshes in a tree (used for simple models like crown)
+function applyTintToTree(entity: PcEntity, mat: StandardMaterial) {
+  if (entity.render) {
+    for (const mi of entity.render.meshInstances) mi.material = mat;
+  }
+  for (const child of entity.children) applyTintToTree(child as PcEntity, mat);
+}
+
+type MeshInstance = import('playcanvas').MeshInstance;
+
+const PROCESSED = new WeakSet<MeshInstance>();
+
+interface EyeGroup { whites: MeshInstance[]; pupils: MeshInstance[] }
+interface EyeParts { left: EyeGroup; right: EyeGroup }
+
+function tintModel(
+  entity: PcEntity, bodyMat: StandardMaterial, bellyMat: StandardMaterial,
+  eyeWhiteMat: StandardMaterial,
+  whites: MeshInstance[], blacks: MeshInstance[]
+) {
+  if (entity.render) {
+    for (const mi of entity.render.meshInstances) {
+      if (PROCESSED.has(mi)) continue;
+      const orig = mi.material as StandardMaterial;
+      if (!orig.diffuse) continue;
+      const r = orig.diffuse.r, g = orig.diffuse.g, b = orig.diffuse.b;
+      const brightness = r + g + b;
+      PROCESSED.add(mi);
+      if (brightness < 0.1) { blacks.push(mi); continue; }
+      if (brightness > 2.0) { mi.material = eyeWhiteMat; whites.push(mi); continue; }
+      if (r > 0.5 && g > 0.3) mi.material = bellyMat;
+      else mi.material = bodyMat;
+    }
+  }
+  for (const child of entity.children) {
+    tintModel(child as PcEntity, bodyMat, bellyMat, eyeWhiteMat, whites, blacks);
+  }
+}
+
+// The gopher GLB has 3 white meshes (2 eyes + 1 tooth) and 3 black meshes (2 pupils + 1 nose).
+// Pick the 2 highest-Y whites as eyes, pair each with nearest black as its pupil, split left/right.
+function safeCenter(mi: MeshInstance): { x: number; y: number; z: number } | null {
+  try { const c = mi.aabb.center; return { x: c.x, y: c.y, z: c.z }; }
+  catch { return null; }
+}
+
+function buildEyeParts(whites: MeshInstance[], blacks: MeshInstance[]): EyeParts | null {
+  const result: EyeParts = {
+    left: { whites: [], pupils: [] },
+    right: { whites: [], pupils: [] },
+  };
+  if (whites.length < 2) return null;
+
+  // Filter to meshes with valid bounding boxes
+  const validWhites = whites.filter(m => safeCenter(m) !== null);
+  const validBlacks = blacks.filter(m => safeCenter(m) !== null);
+  if (validWhites.length < 2) return null;
+
+  // Sort whites by Y descending — top 2 are the eyes, rest are teeth etc.
+  const sortedWhites = [...validWhites].sort((a, b) => safeCenter(b)!.y - safeCenter(a)!.y);
+  const eyeWhites = sortedWhites.slice(0, 2);
+
+  // For each eye white, find the nearest black mesh as its pupil
+  const usedBlacks = new Set<MeshInstance>();
+  const eyePupils: MeshInstance[] = [];
+  for (const eye of eyeWhites) {
+    const ec = safeCenter(eye)!;
+    let bestDist = Infinity;
+    let bestBlack: MeshInstance | null = null;
+    for (const b of validBlacks) {
+      if (usedBlacks.has(b)) continue;
+      const bc = safeCenter(b)!;
+      const dist = Math.sqrt((ec.x - bc.x) ** 2 + (ec.y - bc.y) ** 2 + (ec.z - bc.z) ** 2);
+      if (dist < bestDist) { bestDist = dist; bestBlack = b; }
+    }
+    if (bestBlack) { usedBlacks.add(bestBlack); eyePupils.push(bestBlack); }
+  }
+
+  // Split into left/right by X position
+  const avgX = eyeWhites.reduce((s, m) => s + safeCenter(m)!.x, 0) / eyeWhites.length;
+  for (let i = 0; i < eyeWhites.length; i++) {
+    const w = eyeWhites[i]!;
+    const p = eyePupils[i];
+    const side = safeCenter(w)!.x < avgX ? result.left : result.right;
+    side.whites.push(w);
+    if (p) side.pupils.push(p);
+  }
+  return result;
+}
+
+// Expected mesh count in the gopher GLB (15 meshes total)
+const GOPHER_MESH_COUNT = 15;
+
+function GopherGlb({ color, scale = 1 }: { color: PieceColor; scale?: number }) {
+  const { asset } = useModel(GOPHER_GLB_URL);
+  const entityRef = useRef<PcEntity | null>(null);
+  const eyePartsRef = useRef<EyeParts | null>(null);
+  const [visible, setVisible] = useState(false);
+  const isWhite = color === 'white';
+
+  const bodyMat = useMaterial({
+    diffuse: isWhite ? [0.42, 0.84, 0.9] : [0.81, 0.4, 0.15],
+    specular: [0.2, 0.2, 0.2],
+  });
+  const bellyMat = useMaterial({
+    diffuse: isWhite ? [0.75, 0.93, 0.96] : [0.88, 0.50, 0.22],
+    specular: [0.15, 0.15, 0.15],
+  });
+  const blinkMat = useMaterial({
+    diffuse: isWhite ? [0.42, 0.84, 0.9] : [0.81, 0.4, 0.15],
+    specular: [0.1, 0.1, 0.1],
+  });
+  const eyeWhiteMat = useMaterial({
+    diffuse: [0.95, 0.95, 0.95],
+    specular: [0.3, 0.3, 0.3],
+  });
+
+  // Tint pass — hide until complete to prevent color flash
+  useEffect(() => {
+    if (!entityRef.current || !bodyMat || !bellyMat || !eyeWhiteMat) return;
+    const entity = entityRef.current;
+    let active = true;
+    setVisible(false);
+    const allWhites: MeshInstance[] = [];
+    const allBlacks: MeshInstance[] = [];
+    let totalProcessed = 0;
+
+    const apply = () => {
+      if (!active) return;
+      const newWhites: MeshInstance[] = [];
+      const newBlacks: MeshInstance[] = [];
+      tintModel(entity, bodyMat, bellyMat, eyeWhiteMat, newWhites, newBlacks);
+      const newCount = newWhites.length + newBlacks.length;
+      if (newWhites.length > 0) allWhites.push(...newWhites);
+      if (newBlacks.length > 0) allBlacks.push(...newBlacks);
+      totalProcessed += newCount;
+
+      if (allWhites.length >= 2) {
+        eyePartsRef.current = buildEyeParts(allWhites, allBlacks);
+      }
+
+      if (totalProcessed >= GOPHER_MESH_COUNT) {
+        setVisible(true);
+        return;
+      }
+      // Show after first successful tint even if not all meshes yet
+      if (totalProcessed > 0) setVisible(true);
+      setTimeout(apply, totalProcessed > 0 ? 16 : 50);
+    };
+
+    apply();
+    return () => { active = false; };
+  }, [asset, bodyMat, bellyMat, eyeWhiteMat]);
+
+  // Goofy blink — use castShadow toggle instead of visible to avoid shadow flicker
+  useEffect(() => {
+    if (!blinkMat || !eyeWhiteMat) return;
+    let active = true;
+
+    const closeEye = (group: EyeGroup) => {
+      for (const mi of group.whites) mi.material = blinkMat;
+      for (const mi of group.pupils) { mi.visible = false; mi.castShadow = false; }
+    };
+    const openEye = (group: EyeGroup) => {
+      for (const mi of group.whites) mi.material = eyeWhiteMat;
+      for (const mi of group.pupils) { mi.visible = true; mi.castShadow = true; }
+    };
+
+    const startBlink = () => {
+      if (!active) return;
+      const parts = eyePartsRef.current;
+      if (!parts || (parts.left.whites.length === 0 && parts.right.whites.length === 0)) {
+        setTimeout(startBlink, 500);
+        return;
+      }
+
+      const roll = Math.random();
+      let blinkDuration: number;
+      if (roll < 0.5) {
+        closeEye(parts.left); closeEye(parts.right);
+        blinkDuration = 100 + Math.random() * 60;
+      } else if (roll < 0.7) {
+        closeEye(parts.left);
+        blinkDuration = 200 + Math.random() * 150;
+      } else if (roll < 0.9) {
+        closeEye(parts.right);
+        blinkDuration = 200 + Math.random() * 150;
+      } else {
+        closeEye(parts.left); closeEye(parts.right);
+        blinkDuration = 400 + Math.random() * 200;
+      }
+
+      setTimeout(() => {
+        if (!active) return;
+        openEye(parts.left); openEye(parts.right);
+        setTimeout(startBlink, 1500 + Math.random() * 4500);
+      }, blinkDuration);
+    };
+
+    const timer = setTimeout(startBlink, 2000 + Math.random() * 3000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [blinkMat, eyeWhiteMat]);
+
+  if (!asset) return null;
+
+  const glbScale = 0.20 * scale;
 
   return (
-    <Entity scale={[s, s, s]}>
-      {/* Body */}
-      <Entity position={[0, 0.35, 0]} scale={[0.55, 0.7, 0.45]}>
-        <Render type="sphere" material={m.body} />
-      </Entity>
-      {/* Belly */}
-      <Entity position={[0, 0.3, 0.15]} scale={[0.35, 0.45, 0.2]}>
-        <Render type="sphere" material={m.belly} />
-      </Entity>
-      {/* Head */}
-      <Entity position={[0, 0.85, 0.05]} scale={[0.45, 0.4, 0.4]}>
-        <Render type="sphere" material={m.body} />
-      </Entity>
-      {/* Left eye - with blink */}
-      <Entity position={[-0.14, 0.92, 0.25]} scale={[0.14, 0.14, 0.08]}>
-        <Render type="sphere" material={m.eyeWhite} />
-        <Script script={EyeBlink} />
-      </Entity>
-      <Entity position={[-0.14, 0.92, 0.3]} scale={[0.07, 0.07, 0.04]}>
-        <Render type="sphere" material={m.pupil} />
-        <Script script={EyeBlink} />
-      </Entity>
-      {/* Right eye - with alt blink (sometimes winks independently) */}
-      <Entity position={[0.14, 0.92, 0.25]} scale={[0.14, 0.14, 0.08]}>
-        <Render type="sphere" material={m.eyeWhite} />
-        <Script script={EyeBlinkAlt} />
-      </Entity>
-      <Entity position={[0.14, 0.92, 0.3]} scale={[0.07, 0.07, 0.04]}>
-        <Render type="sphere" material={m.pupil} />
-        <Script script={EyeBlinkAlt} />
-      </Entity>
-      {/* Nose */}
-      <Entity position={[0, 0.82, 0.32]} scale={[0.08, 0.06, 0.06]}>
-        <Render type="sphere" material={m.nose} />
-      </Entity>
-      {/* Teeth */}
-      <Entity position={[-0.03, 0.73, 0.3]} scale={[0.04, 0.06, 0.02]}>
-        <Render type="box" material={m.tooth} />
-      </Entity>
-      <Entity position={[0.03, 0.73, 0.3]} scale={[0.04, 0.06, 0.02]}>
-        <Render type="box" material={m.tooth} />
-      </Entity>
-      {/* Left ear */}
-      <Entity position={[-0.22, 1.1, 0]} scale={[0.1, 0.12, 0.08]}>
-        <Render type="sphere" material={m.body} />
-      </Entity>
-      {/* Right ear */}
-      <Entity position={[0.22, 1.1, 0]} scale={[0.1, 0.12, 0.08]}>
-        <Render type="sphere" material={m.body} />
-      </Entity>
-      {/* Feet */}
-      <Entity position={[-0.15, 0.0, 0.1]} scale={[0.14, 0.06, 0.2]}>
-        <Render type="sphere" material={m.body} />
-      </Entity>
-      <Entity position={[0.15, 0.0, 0.1]} scale={[0.14, 0.06, 0.2]}>
-        <Render type="sphere" material={m.body} />
-      </Entity>
+    <Entity
+      position={[0, 0.38, 0]}
+      scale={visible ? [glbScale, glbScale, glbScale] : [0, 0, 0]}
+      rotation={[0, 0, 7]}
+      ref={entityRef as any}
+    >
+      <Gltf asset={asset} key={`gopher-${asset.id}-${color}`} />
     </Entity>
   );
+}
+
+function CrownGlb({ scale = 1, yOffset = 0, color }: { scale?: number; yOffset?: number; color?: string }) {
+  const { asset } = useModel(CROWN_GLB_URL);
+  const entityRef = useRef<PcEntity | null>(null);
+  const goldMat = useMaterial({
+    diffuse: color === 'accent' ? [0.3, 0.65, 0.75] : [0.9, 0.75, 0.2],
+    specular: [0.5, 0.4, 0.1],
+    metalness: 0.6,
+  });
+
+  useEffect(() => {
+    if (!entityRef.current || !goldMat) return;
+    const entity = entityRef.current;
+    let active = true;
+    let frameCount = 0;
+    const apply = () => {
+      if (!active) return;
+      applyTintToTree(entity, goldMat);
+      frameCount++;
+      if (frameCount < 30) requestAnimationFrame(apply);
+    };
+    requestAnimationFrame(apply);
+    return () => { active = false; };
+  }, [asset, goldMat]);
+
+  if (!asset) return null;
+
+  const s = 0.15 * scale;
+  return (
+    <Entity position={[0, yOffset, 0]} scale={[s, s, s]} ref={entityRef as any}>
+      <Gltf asset={asset} key={`crown-${asset.id}`} />
+    </Entity>
+  );
+}
+
+// Base gopher: use GLB model
+function GopherBase({ color, scale = 1 }: { color: PieceColor; scale?: number }) {
+  return <GopherGlb color={color} scale={scale} />;
 }
 
 // ---- Individual piece types ----
 
 function PawnGopher({ color }: { color: PieceColor }) {
-  return <GopherBase color={color} scale={0.7} />;
+  return <GopherBase color={color} scale={0.85} />;
 }
 
 function RookGopher({ color }: { color: PieceColor }) {
   const m = useGopherMaterials(color);
   return (
     <Entity>
-      <GopherBase color={color} scale={0.8} />
-      <Entity position={[0, 1.05, 0]} scale={[0.3, 0.2, 0.3]}>
+      <GopherBase color={color} scale={0.95} />
+      {/* Castle tower base on head */}
+      <Entity position={[0, 0.70, 0]} scale={[0.22, 0.12, 0.22]}>
         <Render type="cylinder" material={m.accent} />
       </Entity>
-      <Entity position={[-0.12, 1.2, -0.12]} scale={[0.08, 0.08, 0.08]}>
+      {/* Merlons (battlements) — 4 corners, chunky */}
+      <Entity position={[-0.11, 0.82, -0.11]} scale={[0.08, 0.10, 0.08]}>
         <Render type="box" material={m.accent} />
       </Entity>
-      <Entity position={[0.12, 1.2, -0.12]} scale={[0.08, 0.08, 0.08]}>
+      <Entity position={[0.11, 0.82, -0.11]} scale={[0.08, 0.10, 0.08]}>
         <Render type="box" material={m.accent} />
       </Entity>
-      <Entity position={[-0.12, 1.2, 0.12]} scale={[0.08, 0.08, 0.08]}>
+      <Entity position={[-0.11, 0.82, 0.11]} scale={[0.08, 0.10, 0.08]}>
         <Render type="box" material={m.accent} />
       </Entity>
-      <Entity position={[0.12, 1.2, 0.12]} scale={[0.08, 0.08, 0.08]}>
+      <Entity position={[0.11, 0.82, 0.11]} scale={[0.08, 0.10, 0.08]}>
         <Render type="box" material={m.accent} />
       </Entity>
     </Entity>
@@ -336,15 +536,35 @@ function KnightGopher({ color }: { color: PieceColor }) {
   const m = useGopherMaterials(color);
   return (
     <Entity>
-      <GopherBase color={color} scale={0.8} />
-      <Entity position={[-0.18, 1.15, 0]} rotation={[0, 0, 15]} scale={[0.08, 0.2, 0.08]}>
+      <GopherBase color={color} scale={0.95} />
+      {/* Horse mane — spikes pointing outward, placed just outside the head surface.
+          Head center ~(0, 0.50, 0), radius ~0.20. Each spike offset outward by ~0.03 */}
+      <Entity position={[0, 0.72, -0.04]} rotation={[-10, 0, 0]} scale={[0.02, 0.06, 0.02]}>
         <Render type="cone" material={m.accent} />
       </Entity>
-      <Entity position={[0.18, 1.15, 0]} rotation={[0, 0, -15]} scale={[0.08, 0.2, 0.08]}>
+      <Entity position={[0, 0.70, -0.10]} rotation={[-30, 0, 0]} scale={[0.02, 0.06, 0.02]}>
         <Render type="cone" material={m.accent} />
       </Entity>
-      <Entity position={[0, 0.35, 0.28]} scale={[0.2, 0.25, 0.03]}>
-        <Render type="box" material={m.accent} />
+      <Entity position={[0, 0.65, -0.16]} rotation={[-50, 0, 0]} scale={[0.02, 0.055, 0.02]}>
+        <Render type="cone" material={m.accent} />
+      </Entity>
+      <Entity position={[0, 0.58, -0.20]} rotation={[-65, 0, 0]} scale={[0.018, 0.05, 0.018]}>
+        <Render type="cone" material={m.accent} />
+      </Entity>
+      <Entity position={[0, 0.50, -0.22]} rotation={[-80, 0, 0]} scale={[0.016, 0.04, 0.016]}>
+        <Render type="cone" material={m.accent} />
+      </Entity>
+      <Entity position={[0, 0.42, -0.21]} rotation={[-90, 0, 0]} scale={[0.014, 0.03, 0.014]}>
+        <Render type="cone" material={m.accent} />
+      </Entity>
+      {/* Shield on right hand */}
+      <Entity position={[0.27, 0.30, 0.04]} rotation={[0, 0, 8]}>
+        <Entity scale={[0.018, 0.16, 0.12]}>
+          <Render type="cylinder" material={m.accent} />
+        </Entity>
+        <Entity position={[0.012, 0, 0]} scale={[0.022, 0.022, 0.022]}>
+          <Render type="sphere" material={m.gold} />
+        </Entity>
       </Entity>
     </Entity>
   );
@@ -354,12 +574,21 @@ function BishopGopher({ color }: { color: PieceColor }) {
   const m = useGopherMaterials(color);
   return (
     <Entity>
-      <GopherBase color={color} scale={0.8} />
-      <Entity position={[0, 1.15, 0]} scale={[0.15, 0.25, 0.15]}>
+      <GopherBase color={color} scale={0.95} />
+      {/* Tall mitre hat */}
+      <Entity position={[0, 0.84, 0]} scale={[0.15, 0.30, 0.15]}>
         <Render type="cone" material={m.accent} />
       </Entity>
-      <Entity position={[0, 1.02, 0]} scale={[0.2, 0.04, 0.2]}>
+      {/* Gold band at base of mitre */}
+      <Entity position={[0, 0.70, 0]} scale={[0.17, 0.04, 0.17]}>
         <Render type="cylinder" material={m.gold} />
+      </Entity>
+      {/* Cross on front of mitre */}
+      <Entity position={[0, 0.84, 0.09]} scale={[0.025, 0.15, 0.006]}>
+        <Render type="box" material={m.gold} />
+      </Entity>
+      <Entity position={[0, 0.82, 0.09]} scale={[0.09, 0.025, 0.006]}>
+        <Render type="box" material={m.gold} />
       </Entity>
     </Entity>
   );
@@ -369,21 +598,12 @@ function QueenGopher({ color }: { color: PieceColor }) {
   const m = useGopherMaterials(color);
   return (
     <Entity>
-      <GopherBase color={color} scale={0.9} />
-      <Entity position={[0, 1.1, 0]} scale={[0.22, 0.22, 0.22]}>
-        <Render type="torus" material={m.gold} />
-      </Entity>
-      <Entity position={[0, 1.25, 0.15]} scale={[0.04, 0.1, 0.04]}>
-        <Render type="cone" material={m.gold} />
-      </Entity>
-      <Entity position={[0, 1.25, -0.15]} scale={[0.04, 0.1, 0.04]}>
-        <Render type="cone" material={m.gold} />
-      </Entity>
-      <Entity position={[0.15, 1.25, 0]} scale={[0.04, 0.1, 0.04]}>
-        <Render type="cone" material={m.gold} />
-      </Entity>
-      <Entity position={[-0.15, 1.25, 0]} scale={[0.04, 0.1, 0.04]}>
-        <Render type="cone" material={m.gold} />
+      <GopherBase color={color} scale={1.05} />
+      {/* Tiara crown */}
+      <CrownGlb scale={1.0} yOffset={0.72} />
+      {/* Gem orb on top */}
+      <Entity position={[0, 0.88, 0]} scale={[0.05, 0.05, 0.05]}>
+        <Render type="sphere" material={m.gold} />
       </Entity>
     </Entity>
   );
@@ -393,14 +613,15 @@ function KingGopher({ color }: { color: PieceColor }) {
   const m = useGopherMaterials(color);
   return (
     <Entity>
-      <GopherBase color={color} scale={0.95} />
-      <Entity position={[0, 1.12, 0]} scale={[0.25, 0.06, 0.25]}>
-        <Render type="cylinder" material={m.gold} />
-      </Entity>
-      <Entity position={[0, 1.35, 0]} scale={[0.04, 0.2, 0.04]}>
+      <GopherBase color={color} scale={1.1} />
+      {/* Large crown */}
+      <CrownGlb scale={1.4} yOffset={0.76} />
+      {/* Cross on top of crown — vertical beam */}
+      <Entity position={[0, 0.98, 0]} scale={[0.03, 0.16, 0.03]}>
         <Render type="box" material={m.gold} />
       </Entity>
-      <Entity position={[0, 1.38, 0]} scale={[0.15, 0.04, 0.04]}>
+      {/* Cross — horizontal beam */}
+      <Entity position={[0, 1.02, 0]} scale={[0.10, 0.03, 0.03]}>
         <Render type="box" material={m.gold} />
       </Entity>
     </Entity>

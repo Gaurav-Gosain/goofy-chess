@@ -87,8 +87,8 @@ const WEAPON_GLB_URLS: Partial<Record<Weapon3D | Blaster3D, string>> = {
 
 // GLB scale overrides (models have varying sizes)
 const WEAPON_GLB_SCALES: Partial<Record<Weapon3D | Blaster3D, number>> = {
-  sword: 3.5,
-  spear: 3.5,
+  sword: 1.8,
+  spear: 1.8,
   'blaster-a': 2.0,
   'blaster-d': 2.0,
   'blaster-e': 2.0,
@@ -117,112 +117,199 @@ function GlbWeaponModel({ type }: { type: Weapon3D | Blaster3D }) {
 }
 
 // ---- Procedural weapon models (fallback for types without GLBs) ----
+// All models are built along Y axis: handle at bottom, business end at top.
+// Scale ~0.6 total height to match gopher proportions.
 
 function SwordModel() {
   const blade = useMaterial({ diffuse: [0.88, 0.88, 0.92], metalness: 0.8, specular: [0.9, 0.9, 0.9] });
-  const hilt = useMaterial({ diffuse: [0.45, 0.25, 0.1] });
+  const hilt = useMaterial({ diffuse: [0.35, 0.2, 0.08] });
   const guard = useMaterial({ diffuse: [0.9, 0.75, 0.2], metalness: 0.6 });
+  const pommel = useMaterial({ diffuse: [0.85, 0.7, 0.15], metalness: 0.5 });
   return (
     <Entity>
-      <Entity position={[0, 0.45, 0]} scale={[0.06, 0.55, 0.015]}>
+      {/* Blade */}
+      <Entity position={[0, 0.32, 0]} scale={[0.045, 0.38, 0.012]}>
         <Render type="box" material={blade} />
       </Entity>
-      <Entity position={[0, 0.72, 0]} scale={[0.03, 0.06, 0.01]}>
+      {/* Blade tip */}
+      <Entity position={[0, 0.53, 0]} scale={[0.045, 0.06, 0.012]} rotation={[0, 0, 0]}>
         <Render type="cone" material={blade} />
       </Entity>
-      <Entity position={[0, 0.12, 0]} scale={[0.22, 0.035, 0.04]}>
+      {/* Fuller (groove down blade center) */}
+      <Entity position={[0, 0.32, 0.008]} scale={[0.015, 0.3, 0.003]}>
         <Render type="box" material={guard} />
       </Entity>
-      <Entity position={[0, -0.05, 0]} scale={[0.03, 0.15, 0.03]}>
+      {/* Cross guard */}
+      <Entity position={[0, 0.1, 0]} scale={[0.18, 0.025, 0.03]}>
+        <Render type="box" material={guard} />
+      </Entity>
+      {/* Grip */}
+      <Entity position={[0, -0.02, 0]} scale={[0.025, 0.12, 0.025]}>
         <Render type="cylinder" material={hilt} />
+      </Entity>
+      {/* Pommel */}
+      <Entity position={[0, -0.1, 0]} scale={[0.035, 0.035, 0.035]}>
+        <Render type="sphere" material={pommel} />
       </Entity>
     </Entity>
   );
 }
 
 function AxeModel() {
-  const blade = useMaterial({ diffuse: [0.75, 0.75, 0.78], metalness: 0.7 });
-  const handle = useMaterial({ diffuse: [0.5, 0.3, 0.15] });
+  const blade = useMaterial({ diffuse: [0.7, 0.7, 0.75], metalness: 0.7, specular: [0.5, 0.5, 0.5] });
+  const handle = useMaterial({ diffuse: [0.45, 0.28, 0.12] });
+  const binding = useMaterial({ diffuse: [0.3, 0.2, 0.1] });
   return (
     <Entity>
-      <Entity position={[0.1, 0.5, 0]} scale={[0.18, 0.22, 0.025]} rotation={[0, 0, -8]}>
+      {/* Axe head — curved blade */}
+      <Entity position={[0.08, 0.38, 0]} scale={[0.14, 0.16, 0.02]} rotation={[0, 0, -5]}>
         <Render type="box" material={blade} />
       </Entity>
-      <Entity position={[0, 0.05, 0]} scale={[0.03, 0.6, 0.03]}>
+      {/* Blade edge bevel */}
+      <Entity position={[0.16, 0.38, 0]} scale={[0.03, 0.14, 0.015]} rotation={[0, 0, -10]}>
+        <Render type="box" material={blade} />
+      </Entity>
+      {/* Binding where head meets handle */}
+      <Entity position={[0, 0.34, 0]} scale={[0.04, 0.04, 0.035]}>
+        <Render type="cylinder" material={binding} />
+      </Entity>
+      {/* Handle */}
+      <Entity position={[0, 0.08, 0]} scale={[0.025, 0.42, 0.025]}>
         <Render type="cylinder" material={handle} />
+      </Entity>
+      {/* Handle end cap */}
+      <Entity position={[0, -0.12, 0]} scale={[0.032, 0.02, 0.032]}>
+        <Render type="cylinder" material={binding} />
       </Entity>
     </Entity>
   );
 }
 
 function HammerModel() {
-  const head = useMaterial({ diffuse: [0.6, 0.6, 0.65], metalness: 0.6 });
-  const handle = useMaterial({ diffuse: [0.5, 0.3, 0.15] });
+  const head = useMaterial({ diffuse: [0.55, 0.55, 0.6], metalness: 0.6, specular: [0.4, 0.4, 0.4] });
+  const handle = useMaterial({ diffuse: [0.45, 0.28, 0.12] });
+  const band = useMaterial({ diffuse: [0.4, 0.35, 0.3], metalness: 0.3 });
   return (
     <Entity>
-      <Entity position={[0, 0.55, 0]} scale={[0.28, 0.14, 0.14]}>
+      {/* Hammer head — main block */}
+      <Entity position={[0, 0.4, 0]} scale={[0.2, 0.1, 0.1]}>
         <Render type="box" material={head} />
       </Entity>
-      <Entity position={[0, 0.05, 0]} scale={[0.035, 0.5, 0.035]}>
+      {/* Flat striking face */}
+      <Entity position={[0.11, 0.4, 0]} scale={[0.02, 0.11, 0.11]}>
+        <Render type="box" material={band} />
+      </Entity>
+      {/* Metal band */}
+      <Entity position={[0, 0.34, 0]} scale={[0.035, 0.03, 0.035]}>
+        <Render type="cylinder" material={band} />
+      </Entity>
+      {/* Handle */}
+      <Entity position={[0, 0.08, 0]} scale={[0.028, 0.4, 0.028]}>
         <Render type="cylinder" material={handle} />
+      </Entity>
+      {/* Grip wrap */}
+      <Entity position={[0, -0.05, 0]} scale={[0.032, 0.08, 0.032]}>
+        <Render type="cylinder" material={band} />
       </Entity>
     </Entity>
   );
 }
 
 function FryingPanModel() {
-  const pan = useMaterial({ diffuse: [0.25, 0.25, 0.28], metalness: 0.5 });
-  const handle = useMaterial({ diffuse: [0.5, 0.3, 0.15] });
+  const pan = useMaterial({ diffuse: [0.22, 0.22, 0.25], metalness: 0.5, specular: [0.3, 0.3, 0.3] });
+  const inside = useMaterial({ diffuse: [0.3, 0.3, 0.32], metalness: 0.3 });
+  const handle = useMaterial({ diffuse: [0.4, 0.25, 0.1] });
   return (
     <Entity>
-      <Entity position={[0, 0.5, 0]} scale={[0.32, 0.04, 0.32]}>
+      {/* Pan body */}
+      <Entity position={[0, 0.38, 0]} scale={[0.24, 0.03, 0.24]}>
         <Render type="cylinder" material={pan} />
       </Entity>
-      <Entity position={[0, 0.05, 0]} scale={[0.03, 0.4, 0.03]}>
+      {/* Pan rim */}
+      <Entity position={[0, 0.4, 0]} scale={[0.26, 0.015, 0.26]}>
+        <Render type="cylinder" material={inside} />
+      </Entity>
+      {/* Inner surface */}
+      <Entity position={[0, 0.395, 0]} scale={[0.2, 0.005, 0.2]}>
+        <Render type="cylinder" material={inside} />
+      </Entity>
+      {/* Handle */}
+      <Entity position={[0, 0.12, 0]} scale={[0.025, 0.3, 0.025]}>
         <Render type="cylinder" material={handle} />
+      </Entity>
+      {/* Handle rivet */}
+      <Entity position={[0, 0.28, 0]} scale={[0.035, 0.015, 0.035]}>
+        <Render type="cylinder" material={pan} />
       </Entity>
     </Entity>
   );
 }
 
 function SpearModel() {
-  const tip = useMaterial({ diffuse: [0.85, 0.85, 0.88], metalness: 0.7 });
-  const shaft = useMaterial({ diffuse: [0.5, 0.32, 0.15] });
+  const tip = useMaterial({ diffuse: [0.82, 0.82, 0.86], metalness: 0.7, specular: [0.6, 0.6, 0.6] });
+  const shaft = useMaterial({ diffuse: [0.45, 0.3, 0.14] });
+  const binding = useMaterial({ diffuse: [0.3, 0.2, 0.1] });
   return (
     <Entity>
-      <Entity position={[0, 0.82, 0]} scale={[0.06, 0.18, 0.06]}>
+      {/* Spear head — leaf shape */}
+      <Entity position={[0, 0.52, 0]} scale={[0.04, 0.12, 0.015]}>
         <Render type="cone" material={tip} />
       </Entity>
-      <Entity position={[0, 0.15, 0]} scale={[0.025, 0.8, 0.025]}>
+      {/* Spear head base */}
+      <Entity position={[0, 0.45, 0]} scale={[0.035, 0.04, 0.012]}>
+        <Render type="box" material={tip} />
+      </Entity>
+      {/* Socket binding */}
+      <Entity position={[0, 0.42, 0]} scale={[0.03, 0.02, 0.03]}>
+        <Render type="cylinder" material={binding} />
+      </Entity>
+      {/* Shaft */}
+      <Entity position={[0, 0.1, 0]} scale={[0.018, 0.55, 0.018]}>
         <Render type="cylinder" material={shaft} />
+      </Entity>
+      {/* Butt cap */}
+      <Entity position={[0, -0.15, 0]} scale={[0.022, 0.015, 0.022]}>
+        <Render type="cylinder" material={binding} />
       </Entity>
     </Entity>
   );
 }
 
 function MaceModel() {
-  const head = useMaterial({ diffuse: [0.65, 0.65, 0.7], metalness: 0.6 });
-  const spike = useMaterial({ diffuse: [0.8, 0.8, 0.83], metalness: 0.7 });
-  const shaft = useMaterial({ diffuse: [0.5, 0.3, 0.15] });
+  const head = useMaterial({ diffuse: [0.6, 0.6, 0.65], metalness: 0.6, specular: [0.4, 0.4, 0.4] });
+  const flange = useMaterial({ diffuse: [0.7, 0.7, 0.75], metalness: 0.7 });
+  const shaft = useMaterial({ diffuse: [0.45, 0.28, 0.12] });
+  const grip = useMaterial({ diffuse: [0.3, 0.2, 0.1] });
   return (
     <Entity>
-      <Entity position={[0, 0.55, 0]} scale={[0.16, 0.16, 0.16]}>
+      {/* Mace head — sphere */}
+      <Entity position={[0, 0.42, 0]} scale={[0.12, 0.12, 0.12]}>
         <Render type="sphere" material={head} />
       </Entity>
-      <Entity position={[0.1, 0.6, 0]} scale={[0.04, 0.04, 0.04]}>
-        <Render type="cone" material={spike} />
+      {/* Flanges (4 directions) */}
+      <Entity position={[0.08, 0.44, 0]} scale={[0.04, 0.06, 0.015]} rotation={[0, 0, -20]}>
+        <Render type="box" material={flange} />
       </Entity>
-      <Entity position={[-0.1, 0.6, 0]} scale={[0.04, 0.04, 0.04]}>
-        <Render type="cone" material={spike} />
+      <Entity position={[-0.08, 0.44, 0]} scale={[0.04, 0.06, 0.015]} rotation={[0, 0, 20]}>
+        <Render type="box" material={flange} />
       </Entity>
-      <Entity position={[0, 0.65, 0.08]} scale={[0.04, 0.04, 0.04]}>
-        <Render type="cone" material={spike} />
+      <Entity position={[0, 0.44, 0.08]} scale={[0.015, 0.06, 0.04]} rotation={[20, 0, 0]}>
+        <Render type="box" material={flange} />
       </Entity>
-      <Entity position={[0, 0.65, -0.08]} scale={[0.04, 0.04, 0.04]}>
-        <Render type="cone" material={spike} />
+      <Entity position={[0, 0.44, -0.08]} scale={[0.015, 0.06, 0.04]} rotation={[-20, 0, 0]}>
+        <Render type="box" material={flange} />
       </Entity>
-      <Entity position={[0, 0.05, 0]} scale={[0.03, 0.45, 0.03]}>
+      {/* Neck */}
+      <Entity position={[0, 0.32, 0]} scale={[0.025, 0.04, 0.025]}>
+        <Render type="cylinder" material={head} />
+      </Entity>
+      {/* Handle */}
+      <Entity position={[0, 0.08, 0]} scale={[0.022, 0.35, 0.022]}>
         <Render type="cylinder" material={shaft} />
+      </Entity>
+      {/* Grip wrap */}
+      <Entity position={[0, -0.03, 0]} scale={[0.028, 0.08, 0.028]}>
+        <Render type="cylinder" material={grip} />
       </Entity>
     </Entity>
   );
@@ -362,7 +449,38 @@ export function CutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, ph
   );
 }
 
-// ---- Melee animation (existing swing) ----
+// ---- Melee animation ----
+// The weapon tracks the attacker gopher's position exactly (same math as CutsceneAttacker
+// in pieces.tsx: behind capture pos by 0.8, walks forward after kill phase 0.50-0.66).
+// The weapon is held at the gopher's "right hand" (side offset) at shoulder height,
+// then animated per weapon type.
+
+type MeleeAnimStyle = 'overhead' | 'slash' | 'thrust';
+
+/** Map weapon type to its natural animation style */
+const WEAPON_ANIM: Record<Weapon3D, MeleeAnimStyle> = {
+  sword: 'slash',
+  axe: 'overhead',
+  hammer: 'overhead',
+  fryingpan: 'overhead',
+  spear: 'thrust',
+  mace: 'overhead',
+};
+
+/** Get the attacker gopher's world position (mirrors CutsceneAttacker melee logic) */
+function getAttackerPos(capturePos: Pos, attackAngle: number, phase: number) {
+  const cx = capturePos[1] - 3.5;
+  const cz = capturePos[0] - 3.5;
+  const walkT = smoothstep(0.50, 0.66, phase);
+  const behindDist = 0.8 * (1 - walkT);
+  const hopT = phase > 0.42 && phase < 0.50 ? (phase - 0.42) / 0.08 : 0;
+  const hop = hopT > 0 ? Math.sin(hopT * Math.PI) * 0.12 : 0;
+  return {
+    x: cx + -Math.sin(attackAngle) * behindDist,
+    y: BOARD_SURFACE_Y + hop,
+    z: cz + -Math.cos(attackAngle) * behindDist,
+  };
+}
 
 function MeleeCutsceneWeapon({ weaponType, capturePos, attackAngle, phase }: {
   weaponType: Weapon3D;
@@ -370,38 +488,97 @@ function MeleeCutsceneWeapon({ weaponType, capturePos, attackAngle, phase }: {
   attackAngle: number;
   phase: number;
 }) {
-  const cx = capturePos[1] - 3.5;
-  const cz = capturePos[0] - 3.5;
-
   const appear = smoothstep(0.30, 0.36, phase);
-  const raiseT = smoothstep(0.34, 0.40, phase);
-  const swingT = smoothstep(0.42, 0.48, phase);
   const fadeT = smoothstep(0.70, 0.82, phase);
-
   if (appear <= 0.01 || fadeT >= 0.99) return null;
 
-  // Follow attacker's walk-forward after the hit
-  const walkT = smoothstep(0.50, 0.66, phase);
-  const attackerBehind = 0.8 * (1 - walkT);
-  const weaponBehind = attackerBehind + 0.1;
-  const behindX = -Math.sin(attackAngle) * weaponBehind;
-  const behindZ = -Math.cos(attackAngle) * weaponBehind;
+  // Track attacker gopher position exactly
+  const gopher = getAttackerPos(capturePos, attackAngle, phase);
 
-  const raiseHeight = 0.7 + raiseT * 0.35;
-  const swingDrop = swingT * 0.55;
-  const y = BOARD_SURFACE_Y + raiseHeight - swingDrop;
+  // Weapon held to the right side of the gopher, at shoulder height
+  const sideAngle = attackAngle + Math.PI * 0.5;
+  const sideOff = 0.2; // how far right of gopher center
+  const holdX = gopher.x + Math.sin(sideAngle) * sideOff;
+  const holdZ = gopher.z + Math.cos(sideAngle) * sideOff;
+  const holdY = gopher.y + 0.45; // shoulder height
 
-  const tipBack = raiseT * -70;
-  const swingForward = swingT * 140;
-  const swingAngle = tipBack + swingForward;
-  const facingYaw = attackAngle * (180 / Math.PI) + 180;
-
+  const facingYaw = attackAngle * (180 / Math.PI);
   const scale = appear * (1 - fadeT);
+  const style = WEAPON_ANIM[weaponType];
+
+  // Animation phases:
+  // 0.30-0.36: weapon appears, held ready
+  // 0.36-0.42: wind up
+  // 0.42-0.48: strike (weapon impacts at ~0.44, matching GhostPiece hitPhase)
+  // 0.48-0.70: hold/carry weapon while walking forward
+  const windUp = smoothstep(0.36, 0.42, phase);
+  const strike = smoothstep(0.42, 0.46, phase);
+  const hold = phase > 0.48;
+
+  let pitchAngle = 0;
+  let rollAngle = 0;
+  let extraYaw = 0;
+  let yAdj = 0;
+  let fwdAdj = 0;
+  let sideAdj = 0;
+
+  switch (style) {
+    case 'overhead': {
+      // Raise weapon behind head, then slam down
+      const raisePitch = windUp * -80; // tip back behind head
+      const strikePitch = strike * 150; // swing forward and down
+      pitchAngle = raisePitch + strikePitch;
+      yAdj = windUp * 0.2 - strike * 0.15; // raise then drop
+      fwdAdj = strike * 0.15; // lunge forward on strike
+      if (hold) {
+        // Rest weapon on shoulder
+        pitchAngle = 70 - smoothstep(0.48, 0.55, phase) * 40;
+        yAdj = -0.05;
+      }
+      break;
+    }
+    case 'slash': {
+      // Wind up to the right, slash across to the left
+      const windRoll = windUp * 70; // tilt right
+      const slashRoll = strike * -140; // sweep left
+      rollAngle = windRoll + slashRoll;
+      pitchAngle = 15 + windUp * 10 - strike * 10; // slight angle
+      sideAdj = windUp * 0.1 - strike * 0.15; // pull right, sweep left
+      fwdAdj = strike * 0.1;
+      if (hold) {
+        // Casual hold at side
+        rollAngle = -70 + smoothstep(0.48, 0.55, phase) * 50;
+        pitchAngle = 10;
+        sideAdj = -0.05;
+      }
+      break;
+    }
+    case 'thrust': {
+      // Pull back, then thrust forward (weapon held horizontally)
+      pitchAngle = 90; // weapon horizontal
+      const pullBack = windUp * -0.25;
+      const thrustFwd = strike * 0.55;
+      fwdAdj = pullBack + thrustFwd;
+      yAdj = -0.1; // lower to gut level
+      if (hold) {
+        // Weapon at rest, lowered
+        pitchAngle = 60 - smoothstep(0.48, 0.55, phase) * 30;
+        fwdAdj = 0.05;
+      }
+      break;
+    }
+  }
+
+  // Convert forward/side adjustments to world space
+  const fwdX = Math.sin(attackAngle) * fwdAdj;
+  const fwdZ = Math.cos(attackAngle) * fwdAdj;
+  const sdX = Math.sin(sideAngle) * sideAdj;
+  const sdZ = Math.cos(sideAngle) * sideAdj;
 
   return (
     <Entity
-      position={[cx + behindX, y, cz + behindZ]}
-      rotation={[swingAngle, facingYaw, 0]}
+      position={[holdX + fwdX + sdX, holdY + yAdj, holdZ + fwdZ + sdZ]}
+      rotation={[pitchAngle, facingYaw, rollAngle]}
       scale={[scale, scale, scale]}
     >
       <WeaponModel type={weaponType} />
@@ -439,8 +616,8 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
 
   // Blaster held in front of attacker, offset to the right
   const sideAngle = attackAngle + Math.PI * 0.5;
-  const holdOffsetX = Math.sin(attackAngle) * 0.45 + Math.sin(sideAngle) * 0.15;
-  const holdOffsetZ = Math.cos(attackAngle) * 0.45 + Math.cos(sideAngle) * 0.15;
+  const holdOffsetX = Math.sin(attackAngle) * 0.65 + Math.sin(sideAngle) * 0.15;
+  const holdOffsetZ = Math.cos(attackAngle) * 0.65 + Math.cos(sideAngle) * 0.15;
   const holdY = BOARD_SURFACE_Y + 0.45;
 
   // Blaster faces from attacker toward victim
@@ -473,9 +650,9 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
       {/* Muzzle flash */}
       {phase > 0.27 && phase < 0.32 && (
         <MuzzleFlash
-          x={posX + Math.sin(attackAngle) * 0.7}
+          x={posX + Math.sin(attackAngle) * 0.9}
           y={holdY + 0.1}
-          z={posZ + Math.cos(attackAngle) * 0.7}
+          z={posZ + Math.cos(attackAngle) * 0.9}
           phase={phase}
           attackerColor={attackerColor}
         />

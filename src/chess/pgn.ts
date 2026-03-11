@@ -78,7 +78,7 @@ function resolveMove(state: GameState, san: string): ParsedMove | null {
 
   let idx = 0;
   if (s[0] && pieceLetters[s[0]]) {
-    pieceType = pieceLetters[s[0]];
+    pieceType = pieceLetters[s[0]]!;
     idx = 1;
   }
 
@@ -90,8 +90,8 @@ function resolveMove(state: GameState, san: string): ParsedMove | null {
   const destMatch = remaining.match(/([a-h])([1-8])$/);
   if (!destMatch) return null;
 
-  destFile = destMatch[1].charCodeAt(0) - 'a'.charCodeAt(0);
-  destRow = 8 - parseInt(destMatch[2]); // rank 1 = row 7, rank 8 = row 0
+  destFile = destMatch[1]!.charCodeAt(0) - 'a'.charCodeAt(0);
+  destRow = 8 - parseInt(destMatch[2]!); // rank 1 = row 7, rank 8 = row 0
 
   // Everything before destination is disambiguation + capture
   const beforeDest = remaining.slice(0, remaining.length - 2);
@@ -111,7 +111,7 @@ function resolveMove(state: GameState, san: string): ParsedMove | null {
   // Find which piece of that type can move to the destination
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
-      const piece = board[r][c];
+      const piece = board[r]![c];
       if (!piece || piece.color !== turn || piece.type !== pieceType) continue;
 
       // Apply disambiguation

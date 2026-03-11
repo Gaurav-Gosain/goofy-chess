@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type JSX } from 'react';
 import { Application, Entity } from '@playcanvas/react';
 import { Camera, Light, Render } from '@playcanvas/react/components';
 import { OrbitControls } from '@playcanvas/react/scripts';
@@ -79,7 +79,7 @@ const DEFAULT_CAM_ROT: [number, number, number] = [-30, 0, 0];
 function findKingPos(state: GameState, color: PieceColor): Pos {
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
-      const p = state.board[r][c];
+      const p = state.board[r]?.[c];
       if (p && p.type === 'king' && p.color === color) return [r, c];
     }
   }
@@ -738,10 +738,10 @@ function Scene() {
 
   // Execute a move with animation
   const executeMove = useCallback((state: GameState, from: Pos, to: Pos) => {
-    const piece = state.board[from[0]][from[1]];
+    const piece = state.board[from[0]]?.[from[1]];
     if (!piece) return;
 
-    const target = state.board[to[0]][to[1]];
+    const target = state.board[to[0]]?.[to[1]];
     const newState = makeMove(state, from, to);
 
     // Play move sound (goofy sounds on every move)
@@ -851,7 +851,7 @@ function Scene() {
       setReplayPlaying(false);
       return;
     }
-    const move = replayMoves[nextIdx];
+    const move = replayMoves[nextIdx]!;
     executeMove(gameState, move.from, move.to);
     setReplayIndex(nextIdx);
   }, [replayMoves, replayIndex, gameState, executeMove]);
@@ -862,7 +862,7 @@ function Scene() {
     let state = createInitialState();
     const targetIdx = replayIndex - 1;
     for (let i = 0; i <= targetIdx; i++) {
-      state = makeMove(state, replayMoves[i].from, replayMoves[i].to);
+      state = makeMove(state, replayMoves[i]!.from, replayMoves[i]!.to);
     }
     setGameState(state);
     setReplayIndex(targetIdx);
@@ -944,7 +944,7 @@ function Scene() {
     const { board, turn, status } = gameState;
     if (status === 'checkmate' || status === 'stalemate') return;
 
-    const clickedPiece = board[row][col];
+    const clickedPiece = board[row]?.[col];
 
     if (selectedSquare && validMoves.some(([r, c]) => r === row && c === col)) {
       executeMove(gameState, selectedSquare, pos);
@@ -972,7 +972,7 @@ function Scene() {
       // During checkmate, skip the losing king (rendered as FallenKing)
       if (checkmateAnim && checkmateAnim.loserKingPos[0] === row && checkmateAnim.loserKingPos[1] === col) continue;
 
-      const piece = gameState.board[row][col];
+      const piece = gameState.board[row]?.[col];
       if (piece) {
         const isSelected = selectedSquare !== null && selectedSquare[0] === row && selectedSquare[1] === col;
         pieces.push(
@@ -990,7 +990,7 @@ function Scene() {
   }
 
   const moveIndicators = validMoves.map(([row, col]) => {
-    const hasPiece = gameState.board[row][col] !== null;
+    const hasPiece = gameState.board[row]?.[col] != null;
     return <MoveIndicator key={`move-${row}-${col}`} row={row} col={col} isCapture={hasPiece} onClick={() => handleSquareClick([row, col])} />;
   });
 

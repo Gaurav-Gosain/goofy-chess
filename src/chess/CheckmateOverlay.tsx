@@ -40,7 +40,7 @@ function generateConfetti(count: number) {
       x: Math.random() * 100,
       delay: Math.random() * 0.5,
       duration: 2 + Math.random() * 2,
-      color: colors[Math.floor(Math.random() * colors.length)],
+      color: colors[Math.floor(Math.random() * colors.length)] ?? '#FFD700',
       size: 4 + Math.random() * 8,
       rotation: Math.random() * 360,
     });

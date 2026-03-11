@@ -394,7 +394,7 @@ function MeleeCutsceneWeapon({ weaponType, capturePos, attackAngle, phase }: {
   const tipBack = raiseT * -70;
   const swingForward = swingT * 140;
   const swingAngle = tipBack + swingForward;
-  const facingYaw = attackAngle * (180 / Math.PI);
+  const facingYaw = attackAngle * (180 / Math.PI) + 180;
 
   const scale = appear * (1 - fadeT);
 
@@ -445,8 +445,8 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
 
   // Blaster faces from attacker toward victim
   // attackAngle = atan2(dx, dz) in world space, GLB models point along +Z by default
-  // so facingYaw = attackAngle in degrees makes the model face toward the victim
-  const facingYaw = attackAngle * (180 / Math.PI);
+  // GLB barrel is along -Z in PlayCanvas, so add 180° to face toward victim
+  const facingYaw = attackAngle * (180 / Math.PI) + 180;
 
   // Recoil kick backwards
   const recoil = (recoilT - recoilRecover * recoilT) * 0.2;

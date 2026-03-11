@@ -97,15 +97,20 @@ const WEAPON_GLB_SCALES: Partial<Record<Weapon3D | Blaster3D, number>> = {
   'blaster-n': 2.0,
 };
 
+// Kenney blaster GLB models have barrel along +Z.
+// facingYaw on parent points +Z toward target, so no offset needed.
+const WEAPON_ROTATION_OFFSET: Partial<Record<Weapon3D | Blaster3D, [number, number, number]>> = {};
+
 function GlbWeaponModel({ type }: { type: Weapon3D | Blaster3D }) {
   const url = WEAPON_GLB_URLS[type];
   const { asset } = useModel(url ?? '');
   const s = WEAPON_GLB_SCALES[type] ?? 2.0;
+  const rot = WEAPON_ROTATION_OFFSET[type] ?? [0, 0, 0];
 
   if (!asset || !url) return null;
 
   return (
-    <Entity scale={[s, s, s]}>
+    <Entity scale={[s, s, s]} rotation={rot}>
       <Gltf asset={asset} />
     </Entity>
   );
@@ -432,10 +437,10 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
   const posX = fx + (cx - fx) * walkT;
   const posZ = fz + (cz - fz) * walkT;
 
-  // Blaster held at side, offset to the right of the attacker
+  // Blaster held in front of attacker, offset to the right
   const sideAngle = attackAngle + Math.PI * 0.5;
-  const holdOffsetX = Math.sin(attackAngle) * 0.15 + Math.sin(sideAngle) * 0.15;
-  const holdOffsetZ = Math.cos(attackAngle) * 0.15 + Math.cos(sideAngle) * 0.15;
+  const holdOffsetX = Math.sin(attackAngle) * 0.45 + Math.sin(sideAngle) * 0.15;
+  const holdOffsetZ = Math.cos(attackAngle) * 0.45 + Math.cos(sideAngle) * 0.15;
   const holdY = BOARD_SURFACE_Y + 0.45;
 
   // Blaster faces from attacker toward victim
@@ -468,9 +473,9 @@ function RangedCutsceneWeapon({ weaponDef, capturePos, fromPos, attackAngle, pha
       {/* Muzzle flash */}
       {phase > 0.27 && phase < 0.32 && (
         <MuzzleFlash
-          x={posX + Math.sin(attackAngle) * 0.4}
+          x={posX + Math.sin(attackAngle) * 0.7}
           y={holdY + 0.1}
-          z={posZ + Math.cos(attackAngle) * 0.4}
+          z={posZ + Math.cos(attackAngle) * 0.7}
           phase={phase}
           attackerColor={attackerColor}
         />

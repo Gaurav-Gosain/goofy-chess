@@ -263,16 +263,19 @@ const DESI_INTERJECTIONS = [
   "Bahut hard!", "Kya scene hai yaar",
 ];
 
-// ---- No-repeat tracker ----
-const lastLines: Record<string, string | null> = {};
+// ---- No-repeat tracker — remembers last 3 lines per category ----
+const recentLines: Record<string, string[]> = {};
 
 function pickLine(pool: string[], category: string): string {
   if (pool.length <= 1) return pool[0] ?? '';
-  const last = lastLines[category];
-  const filtered = last ? pool.filter(s => s !== last) : pool;
+  const recent = recentLines[category] ?? [];
+  // Filter out last 3 used lines (or fewer if pool is small)
+  const maxFilter = Math.min(3, Math.floor(pool.length / 2));
+  const recentSet = recent.slice(0, maxFilter);
+  const filtered = pool.filter(s => !recentSet.includes(s));
   const arr = filtered.length > 0 ? filtered : pool;
   const pick = arr[Math.floor(Math.random() * arr.length)]!;
-  lastLines[category] = pick;
+  recentLines[category] = [pick, ...recent.slice(0, 4)];
   return pick;
 }
 

@@ -1,7 +1,8 @@
 import type { GameState, PieceType } from './engine';
 import type { PieceStyle } from './pieces';
-import type { MemeMode } from './sounds';
+import { memeAudio, type MemeMode } from './sounds';
 import { ReplayPanel } from './ReplayPanel';
+import { useState } from 'react';
 
 const PIECE_SYMBOLS: Record<PieceType, string> = {
   king: '\u265A', queen: '\u265B', rook: '\u265C', bishop: '\u265D', knight: '\u265E', pawn: '\u265F',
@@ -181,6 +182,8 @@ export function GameUI({
           {memeMode === 'desi' ? 'Desi Mode ON' : 'Desi Mode OFF'}
         </button>
 
+        <VolumeControl />
+
         {showAiControls && (
           <>
             <div style={sliderBlock}>
@@ -302,6 +305,42 @@ export function GameUI({
           50% { opacity: 0.5; transform: scale(1.3); }
         }
       `}</style>
+    </div>
+  );
+}
+
+function VolumeControl() {
+  const [vol, setVol] = useState(memeAudio.volume);
+  const [muted, setMuted] = useState(memeAudio.muted);
+
+  const handleVolChange = (v: number) => {
+    setVol(v);
+    memeAudio.volume = v;
+    if (v > 0 && muted) { setMuted(false); memeAudio.muted = false; }
+  };
+
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    memeAudio.muted = next;
+    if (next) memeAudio.stopAll();
+  };
+
+  return (
+    <div style={{ ...sliderBlock, display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <button
+        onClick={toggleMute}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '16px', lineHeight: 1 }}
+        title={muted ? 'Unmute' : 'Mute'}
+      >
+        {muted ? '\uD83D\uDD07' : vol < 0.3 ? '\uD83D\uDD08' : vol < 0.6 ? '\uD83D\uDD09' : '\uD83D\uDD0A'}
+      </button>
+      <input
+        type="range" min={0} max={1} step={0.05}
+        value={muted ? 0 : vol}
+        onChange={e => handleVolChange(Number(e.target.value))}
+        style={{ width: '100%', cursor: 'pointer' }}
+      />
     </div>
   );
 }

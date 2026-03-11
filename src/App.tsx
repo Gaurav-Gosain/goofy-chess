@@ -4,13 +4,14 @@ import { Camera, Light, Render } from '@playcanvas/react/components';
 import { OrbitControls } from '@playcanvas/react/scripts';
 import { useMaterial } from '@playcanvas/react/hooks';
 import { FILLMODE_FILL_WINDOW, RESOLUTION_AUTO } from 'playcanvas';
+import type { Entity as PcEntity } from 'playcanvas';
 
 import {
   createInitialState, getValidMoves, makeMove, stateToFen, parseUciMove,
   type GameState, type Pos, type PieceColor, type PieceType,
 } from './chess/engine';
 import { ChessBoard } from './chess/Board';
-import { ChessPiece, AnimatingPiece, GhostPiece, CutsceneAttacker, FallenKing, BOARD_SURFACE_Y, type PieceStyle } from './chess/pieces';
+import { ChessPiece, AnimatingPiece, GhostPiece, CutsceneAttacker, FallenKing, BOARD_SURFACE_Y, PIECE_COMPONENTS, type PieceStyle } from './chess/pieces';
 import { CutsceneWeapon, WEAPON_DEFS, pickWeapon, getProjectilePos, type Weapon3D, type Blaster3D, type WeaponCategory } from './chess/weapons';
 import { GameUI } from './chess/GameUI';
 import { CutsceneOverlay } from './chess/CutsceneOverlay';
@@ -155,6 +156,45 @@ function Scene() {
   // Refs to track latest camera pos for smooth return
   const lastCamPosRef = useRef<[number, number, number]>(DEFAULT_CAM_POS);
   const lastCamRotRef = useRef<[number, number, number]>(DEFAULT_CAM_ROT);
+  // Direct ref to camera entity for force-updating position (bypasses OrbitControls)
+  const camEntityRef = useRef<PcEntity | null>(null);
+
+  /** Set camera for cutscenes — only uses entity ref, no React state updates.
+   *  This prevents React re-renders from fighting our transform. */
+  const setCutsceneCamera = useCallback((
+    pos: [number, number, number],
+    lookAtTarget: [number, number, number],
+  ) => {
+    lastCamPosRef.current = pos;
+    const entity = camEntityRef.current;
+    if (entity) {
+      if (entity.script) entity.script.enabled = false;
+      entity.setLocalPosition(pos[0], pos[1], pos[2]);
+      entity.lookAt(lookAtTarget[0], lookAtTarget[1], lookAtTarget[2]);
+      // Read back Euler angles for return animation
+      const angles = entity.getLocalEulerAngles();
+      lastCamRotRef.current = [angles.x, angles.y, angles.z];
+    }
+  }, []);
+
+  /** Set camera via React state (for orbit mode, return animation, defaults). */
+  const setDefaultCamera = useCallback((pos: [number, number, number], rot: [number, number, number]) => {
+    setCamPos(pos);
+    setCamRot(rot);
+    lastCamPosRef.current = pos;
+    lastCamRotRef.current = rot;
+    const entity = camEntityRef.current;
+    if (entity) {
+      entity.setLocalPosition(pos[0], pos[1], pos[2]);
+      entity.setLocalEulerAngles(rot[0], rot[1], rot[2]);
+    }
+  }, []);
+
+  /** Re-enable scripts on camera entity (for OrbitControls to work again) */
+  const enableCamScripts = useCallback(() => {
+    const entity = camEntityRef.current;
+    if (entity && entity.script) entity.script.enabled = true;
+  }, []);
 
   // Track pending checkmate (fires after cutscene ends)
   const pendingCheckmateRef = useRef<{ winner: PieceColor; state: GameState } | null>(null);
@@ -293,24 +333,28 @@ function Scene() {
         if (!prev) return null;
         const newProgress = prev.progress + dt / RETURN_DURATION;
         if (newProgress >= 1) {
-          setCamPos(DEFAULT_CAM_POS);
-          setCamRot(DEFAULT_CAM_ROT);
+          setDefaultCamera(DEFAULT_CAM_POS, DEFAULT_CAM_ROT);
           setCamOverride(false);
+          enableCamScripts();
           return null;
         }
 
         // Smooth ease-out cubic
         const t = 1 - Math.pow(1 - newProgress, 3);
-        setCamPos([
+        const lerpPos: [number, number, number] = [
           prev.fromPos[0] + (DEFAULT_CAM_POS[0] - prev.fromPos[0]) * t,
           prev.fromPos[1] + (DEFAULT_CAM_POS[1] - prev.fromPos[1]) * t,
           prev.fromPos[2] + (DEFAULT_CAM_POS[2] - prev.fromPos[2]) * t,
-        ]);
-        setCamRot([
+        ];
+        const lerpRot: [number, number, number] = [
           prev.fromRot[0] + (DEFAULT_CAM_ROT[0] - prev.fromRot[0]) * t,
           prev.fromRot[1] + (DEFAULT_CAM_ROT[1] - prev.fromRot[1]) * t,
           prev.fromRot[2] + (DEFAULT_CAM_ROT[2] - prev.fromRot[2]) * t,
-        ]);
+        ];
+        // Use setDefaultCamera but keep scripts disabled during lerp
+        setDefaultCamera(lerpPos, lerpRot);
+        const entity = camEntityRef.current;
+        if (entity?.script) entity.script.enabled = false;
         return { ...prev, progress: newProgress };
       });
 
@@ -375,19 +419,20 @@ function Scene() {
     if (isRanged) {
       updateRangedCamera(cs, phase);
     } else {
-      updateMeleeCamera(cs.capturePos, cs.attackerColor, phase);
+      updateMeleeCamera(cs.capturePos, cs.attackerColor, phase, cs.attackAngle);
     }
   }, []);
 
   // Melee camera (existing close-quarters choreography)
-  const updateMeleeCamera = useCallback((pos: Pos, attackerColor: PieceColor, phase: number) => {
+  const updateMeleeCamera = useCallback((pos: Pos, attackerColor: PieceColor, phase: number, attackAngle?: number) => {
     const cx = pos[1] - 3.5;
     const cz = pos[0] - 3.5;
     const targetY = BOARD_SURFACE_Y + 0.5;
 
-    const baseAngle = attackerColor === 'white' ? Math.PI * 0.8 : Math.PI * 0.2;
-    const victimAngle = baseAngle + Math.PI;
-    const sideAngle = (baseAngle + victimAngle) / 2 + Math.PI * 0.5;
+    // Use actual attack angle so camera centers on the action
+    const sideAngle = attackAngle != null
+      ? attackAngle + Math.PI * 0.5
+      : ((attackerColor === 'white' ? Math.PI * 0.8 : Math.PI * 0.2) + Math.PI * 0.5);
 
     let camX: number, camY: number, camZ: number;
     let roll = 0;
@@ -457,12 +502,7 @@ function Scene() {
     const pitch = Math.atan2(lookY, Math.sqrt(lookX * lookX + lookZ * lookZ)) * (180 / Math.PI);
     const yaw = Math.atan2(lookX, lookZ) * (180 / Math.PI);
 
-    const newPos: [number, number, number] = [camX, camY, camZ];
-    const newRot: [number, number, number] = [pitch, yaw, roll];
-    setCamPos(newPos);
-    setCamRot(newRot);
-    lastCamPosRef.current = newPos;
-    lastCamRotRef.current = newRot;
+    setCutsceneCamera([camX, camY, camZ], [cx, targetY, cz]);
   }, []);
 
   // Ranged camera: close-up on attacker, follow projectile, impact at victim, walk
@@ -586,12 +626,7 @@ function Scene() {
     const pitch = Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) * (180 / Math.PI);
     const yaw = Math.atan2(dx, dz) * (180 / Math.PI);
 
-    const newPos: [number, number, number] = [camX, camY, camZ];
-    const newRot: [number, number, number] = [pitch, yaw, roll];
-    setCamPos(newPos);
-    setCamRot(newRot);
-    lastCamPosRef.current = newPos;
-    lastCamRotRef.current = newRot;
+    setCutsceneCamera([camX, camY, camZ], [lookAtX, lookAtY, lookAtZ]);
   }, []);
 
   // Checkmate camera
@@ -651,12 +686,7 @@ function Scene() {
     const pitch = Math.atan2(lookY, Math.sqrt(lookX * lookX + lookZ * lookZ)) * (180 / Math.PI);
     const yaw = Math.atan2(lookX, lookZ) * (180 / Math.PI);
 
-    const newPos: [number, number, number] = [camX, camY, camZ];
-    const newRot: [number, number, number] = [pitch, yaw, 0];
-    setCamPos(newPos);
-    setCamRot(newRot);
-    lastCamPosRef.current = newPos;
-    lastCamRotRef.current = newRot;
+    setCutsceneCamera([camX, camY, camZ], [lookAtX, targetY, lookAtZ]);
   }, []);
 
   const endCutscene = useCallback(() => {
@@ -686,6 +716,7 @@ function Scene() {
   }, []);
 
   const skipCutscene = useCallback(() => {
+    memeAudio.stopAll();
     if (cutscene) {
       cancelAnimationFrame(cutsceneFrameRef.current);
       setCutscene(null);
@@ -701,8 +732,8 @@ function Scene() {
     pendingCheckmateRef.current = null;
     // Snap camera back immediately on skip
     setCamOverride(false);
-    setCamPos(DEFAULT_CAM_POS);
-    setCamRot(DEFAULT_CAM_ROT);
+    setDefaultCamera(DEFAULT_CAM_POS, DEFAULT_CAM_ROT);
+    enableCamScripts();
   }, [cutscene, checkmateAnim, cameraReturn]);
 
   // Execute a move with animation
@@ -805,8 +836,8 @@ function Scene() {
     if (cameraReturn) { cancelAnimationFrame(returnFrameRef.current); setCameraReturn(null); }
     pendingCheckmateRef.current = null;
     setCamOverride(false);
-    setCamPos(DEFAULT_CAM_POS);
-    setCamRot(DEFAULT_CAM_ROT);
+    setDefaultCamera(DEFAULT_CAM_POS, DEFAULT_CAM_ROT);
+    enableCamScripts();
 
     setReplayMoves(replay.moves);
     setReplayIndex(-1);
@@ -864,6 +895,7 @@ function Scene() {
   }, [replayPlaying, replayMoves, replayIndex, animation, cutscene, checkmateAnim, cameraReturn, replaySpeed, replayStep]);
 
   const handleNewGame = useCallback(() => {
+    memeAudio.stopAll();
     gameGenRef.current++;
     setGameState(createInitialState());
     setSelectedSquare(null);
@@ -884,8 +916,8 @@ function Scene() {
     }
     pendingCheckmateRef.current = null;
     setCamOverride(false);
-    setCamPos(DEFAULT_CAM_POS);
-    setCamRot(DEFAULT_CAM_ROT);
+    setDefaultCamera(DEFAULT_CAM_POS, DEFAULT_CAM_ROT);
+    enableCamScripts();
     // Clear replay
     setReplayMoves(null);
     setReplayIndex(-1);
@@ -1007,13 +1039,68 @@ function Scene() {
   return (
     <>
       <Application fillMode={FILLMODE_FILL_WINDOW} resolutionMode={RESOLUTION_AUTO} style={{ width: '100vw', height: '100vh' }}>
-        {/* Camera */}
-        <Entity position={camPos} rotation={camRot}>
+        {/* Camera — stable entity, OrbitControls conditionally rendered */}
+        <Entity position={camPos} rotation={camRot} ref={camEntityRef as any}>
           <Camera fov={cutscene ? 40 : checkmateAnim ? 38 : responsiveFov} near={0.1} far={100} clearColor={[0.12, 0.14, 0.18, 1]} />
           {!camOverride && (
             <OrbitControls distance={8.7} distanceMin={2} distanceMax={50} frameOnStart={false} />
           )}
         </Entity>
+
+        {/* 3D gopher portraits during VS showdown — world space, positioned in front of camera */}
+        {cutscene && csPhase > 0.02 && csPhase < 0.22 && (() => {
+          const showT = smoothstep(0.02, 0.06, csPhase);
+          const hideT = smoothstep(0.16, 0.22, csPhase);
+          const op = showT * (1 - hideT);
+          const slideL = -(1 - op) * 0.5;
+          const slideR = (1 - op) * 0.5;
+          const AttackerModel = PIECE_COMPONENTS[cutscene.attackerType];
+          const VictimModel = PIECE_COMPONENTS[cutscene.victimType];
+
+          // Compute world positions from camera state
+          const yawRad = camRot[1] * Math.PI / 180;
+          const pitchRad = camRot[0] * Math.PI / 180;
+          // Camera forward direction (into screen)
+          const fwdX = -Math.sin(yawRad) * Math.cos(pitchRad);
+          const fwdY = Math.sin(pitchRad);
+          const fwdZ = -Math.cos(yawRad) * Math.cos(pitchRad);
+          // Camera right direction
+          const rightX = Math.cos(yawRad);
+          const rightZ = -Math.sin(yawRad);
+          // Camera up (approximate, ignoring roll)
+          const upX = -Math.sin(yawRad) * Math.sin(pitchRad);
+          const upY = Math.cos(pitchRad);
+          const upZ = -Math.cos(yawRad) * Math.sin(pitchRad);
+
+          const dist = 1.8;
+          const baseX = camPos[0] + fwdX * dist;
+          const baseY = camPos[1] + fwdY * dist - 0.15;
+          const baseZ = camPos[2] + fwdZ * dist;
+
+          const spread = 0.55;
+          const lx = baseX + rightX * (-spread + slideL);
+          const lz = baseZ + rightZ * (-spread + slideL);
+          const rx = baseX + rightX * (spread + slideR);
+          const rz = baseZ + rightZ * (spread + slideR);
+
+          // Portraits face toward camera: same yaw as camera (model +Z faces toward cam)
+          const portraitYaw = camRot[1];
+          const s = 0.22 * op;
+
+          return (
+            <>
+              <Entity position={[lx, baseY, lz]} scale={[s, s, s]} rotation={[0, portraitYaw, 0]}>
+                <AttackerModel color={cutscene.attackerColor} />
+              </Entity>
+              <Entity position={[(lx + rx) / 2, baseY + 0.45, (lz + rz) / 2]}>
+                <Light type="omni" color={[1, 1, 1]} intensity={0.8} range={3} />
+              </Entity>
+              <Entity position={[rx, baseY, rz]} scale={[s, s, s]} rotation={[0, portraitYaw, 0]}>
+                <VictimModel color={cutscene.victimColor} />
+              </Entity>
+            </>
+          );
+        })()}
 
         {/* Lighting */}
         <Entity rotation={[50, 30, 0]}>

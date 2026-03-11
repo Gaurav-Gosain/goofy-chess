@@ -183,11 +183,6 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-const PIECE_EMOJI: Record<PieceType, string> = {
-  pawn: '\u265F', knight: '\u265E', bishop: '\u265D',
-  rook: '\u265C', queen: '\u265B', king: '\u265A',
-};
-
 function generateSpeedLines(count: number) {
   const lines: { angle: number; length: number; width: number; offset: number }[] = [];
   for (let i = 0; i < count; i++) {
@@ -296,6 +291,13 @@ export function CutsceneOverlay({
   const memeImpactOp = smoothstep(0.43, 0.46, phase) * (1 - smoothstep(0.58, 0.65, phase));
   const postKillOp = smoothstep(0.58, 0.63, phase) * (1 - smoothstep(0.80, 0.88, phase));
 
+  // Chromatic aberration on impact (social media eye candy)
+  const chromaShift = impactOp > 0 ? impactOp * 4 : 0;
+  // VS screen pulse
+  const vsPulse = showdownOp > 0 ? 1 + Math.sin(phase * 40) * 0.05 : 1;
+  // Kill text bounce
+  const killBounce = killOp > 0 ? Math.sin(phase * 60) * 3 * killOp : 0;
+
   return (
     <div
       style={{
@@ -316,37 +318,44 @@ export function CutsceneOverlay({
         opacity: vignetteOp,
       }} />
 
-      {/* === COWBOY SHOWDOWN === */}
-      {showdownOp > 0.01 && (
+      {/* Chromatic aberration on impact — red/blue shift */}
+      {chromaShift > 0.5 && (
         <>
           <div style={{
-            position: 'absolute', top: 0, left: 0, bottom: 0, width: '50%',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            position: 'absolute', inset: 0,
+            boxShadow: `inset ${chromaShift}px 0 ${chromaShift * 3}px rgba(255,0,0,0.15), inset -${chromaShift}px 0 ${chromaShift * 3}px rgba(0,100,255,0.15)`,
+            pointerEvents: 'none', mixBlendMode: 'screen',
+          }} />
+        </>
+      )}
+
+      {/* === COWBOY SHOWDOWN — 3D gopher faces rendered in App.tsx, labels here === */}
+      {showdownOp > 0.01 && (
+        <>
+          {/* Left label — attacker name */}
+          <div style={{
+            position: 'absolute', bottom: '28%', left: '12%',
             opacity: showdownOp * masterFade,
-            transform: `translateX(${-(1 - showdownOp) * 80}px)`,
+            transform: `translateX(${-(1 - showdownOp) * 60}px)`,
+            textAlign: 'center',
           }}>
-            <div style={{ fontSize: '80px', filter: `drop-shadow(0 0 20px ${attackerCol})`, transform: 'scaleX(-1)' }}>
-              {PIECE_EMOJI[attackerType]}
-            </div>
             <div style={{
               fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '14px', fontWeight: 700,
-              color: attackerCol, letterSpacing: '3px', textTransform: 'uppercase', marginTop: '8px',
-              textShadow: `0 0 15px ${attackerCol}88`,
+              color: attackerCol, letterSpacing: '3px', textTransform: 'uppercase',
+              textShadow: `0 0 15px ${attackerCol}88, 0 2px 4px rgba(0,0,0,0.8)`,
             }}>{attackerName}</div>
           </div>
+          {/* Right label — victim name */}
           <div style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0, width: '50%',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            position: 'absolute', bottom: '28%', right: '12%',
             opacity: showdownOp * masterFade,
-            transform: `translateX(${(1 - showdownOp) * 80}px)`,
+            transform: `translateX(${(1 - showdownOp) * 60}px)`,
+            textAlign: 'center',
           }}>
-            <div style={{ fontSize: '80px', filter: `drop-shadow(0 0 20px ${victimCol})` }}>
-              {PIECE_EMOJI[victimType]}
-            </div>
             <div style={{
               fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '14px', fontWeight: 700,
-              color: victimCol, letterSpacing: '3px', textTransform: 'uppercase', marginTop: '8px',
-              textShadow: `0 0 15px ${victimCol}88`,
+              color: victimCol, letterSpacing: '3px', textTransform: 'uppercase',
+              textShadow: `0 0 15px ${victimCol}88, 0 2px 4px rgba(0,0,0,0.8)`,
             }}>{victimName}</div>
           </div>
           <div style={{
@@ -356,22 +365,32 @@ export function CutsceneOverlay({
             transform: 'translate(-50%, -50%) rotate(15deg)',
             boxShadow: '0 0 20px rgba(255,255,255,0.5)',
           }} />
+          {/* VS glow ring */}
           <div style={{
-            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '24px', fontWeight: 900,
-            color: '#fff', letterSpacing: '6px',
-            textShadow: '0 0 20px rgba(255,255,255,0.5), 0 2px 6px rgba(0,0,0,0.8)',
+            position: 'absolute', top: '50%', left: '50%',
+            width: '80px', height: '80px', borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.3)',
+            transform: `translate(-50%, -50%) scale(${vsPulse})`,
+            boxShadow: '0 0 30px rgba(255,255,255,0.2), inset 0 0 20px rgba(255,255,255,0.1)',
+            opacity: showdownOp * 0.6,
+          }} />
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: `translate(-50%, -50%) scale(${vsPulse})`,
+            fontFamily: "'Impact', 'Arial Black', sans-serif", fontSize: '32px', fontWeight: 900,
+            color: '#fff', letterSpacing: '8px',
+            textShadow: `0 0 30px rgba(255,255,255,0.7), 0 0 60px ${attackerCol}44, 0 2px 6px rgba(0,0,0,0.8)`,
             opacity: showdownOp,
           }}>VS</div>
         </>
       )}
 
       {/* Victim scared dialog */}
-      <DialogCard name={victimName} emoji={PIECE_EMOJI[victimType]} line={victimScared!}
+      <DialogCard name={victimName} pieceColor={victimColor} pieceType={victimType} line={victimScared!}
         color={victimCol} opacity={victimScaredOp * masterFade} slideX={victimScaredSlide} side="right" style="scared" />
 
       {/* Attacker taunt */}
-      <DialogCard name={attackerName} emoji={PIECE_EMOJI[attackerType]} line={attackerTaunt!}
+      <DialogCard name={attackerName} pieceColor={attackerColor} pieceType={attackerType} line={attackerTaunt!}
         color={attackerCol} opacity={attackerTauntOp * masterFade} slideX={attackerTauntSlide} side="left" style="taunt" />
 
       {/* Weapon title */}
@@ -540,7 +559,7 @@ export function CutsceneOverlay({
       )}
 
       {/* Victory quip */}
-      <DialogCard name={attackerName} emoji={PIECE_EMOJI[attackerType]} line={attackerVictory!}
+      <DialogCard name={attackerName} pieceColor={attackerColor} pieceType={attackerType} line={attackerVictory!}
         color={attackerCol} opacity={victoryOp * masterFade} slideX={victorySlide} side="left" style="victory" />
 
       {/* Kill feed */}
@@ -590,8 +609,13 @@ export function CutsceneOverlay({
 
 // ---- Reusable dialog card ----
 
-function DialogCard({ name, emoji, line, color, opacity, slideX, side, style: cardStyle }: {
-  name: string; emoji: string; line: string; color: string;
+const PIECE_ICON: Record<PieceType, string> = {
+  pawn: '\u265F', knight: '\u265E', bishop: '\u265D',
+  rook: '\u265C', queen: '\u265B', king: '\u265A',
+};
+
+function DialogCard({ name, pieceColor, pieceType, line, color, opacity, slideX, side, style: cardStyle }: {
+  name: string; pieceColor: PieceColor; pieceType: PieceType; line: string; color: string;
   opacity: number; slideX: number; side: 'left' | 'right';
   style: 'scared' | 'taunt' | 'victory';
 }) {
@@ -612,9 +636,13 @@ function DialogCard({ name, emoji, line, color, opacity, slideX, side, style: ca
         boxShadow: `0 0 30px ${color}33, inset 0 0 20px ${color}11`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <span style={{ fontSize: '22px', filter: `drop-shadow(0 0 6px ${color})`, ...(isScared ? { transform: 'scale(1.1)' } : {}) }}>
-            {emoji}
-          </span>
+          <div style={{
+            fontSize: '28px', lineHeight: 1, filter: `drop-shadow(0 0 6px ${color})`,
+            ...(isScared ? { transform: 'scale(1.1)' } : {}), flexShrink: 0,
+            color: pieceColor === 'white' ? '#6AD7E5' : '#CE6527',
+          }}>
+            {PIECE_ICON[pieceType]}
+          </div>
           <span style={{
             fontSize: '11px', color, fontWeight: 700, letterSpacing: '2px',
             fontFamily: "'Segoe UI', system-ui, sans-serif", textTransform: 'uppercase',

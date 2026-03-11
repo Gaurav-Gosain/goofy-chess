@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Entity, Gltf } from '@playcanvas/react';
 import { Render, Script } from '@playcanvas/react/components';
 import { useMaterial, useModel } from '@playcanvas/react/hooks';
@@ -109,94 +109,6 @@ class GopherIdle extends PcScript {
   }
 }
 
-// ---- Blink animation script (attached to eye entities) ----
-class EyeBlink extends PcScript {
-  static override scriptName = 'eyeBlink';
-  time = 0;
-  nextBlink = 0;
-  isBlinking = false;
-  blinkTime = 0;
-  isOneEye = false; // wink
-  originalScaleY = 1;
-
-  initialize() {
-    this.time = Math.random() * 10;
-    this.nextBlink = 1 + Math.random() * 4;
-    this.originalScaleY = this.entity.getLocalScale().y;
-  }
-
-  update(dt: number) {
-    this.time += dt;
-
-    if (!this.isBlinking && this.time > this.nextBlink) {
-      this.isBlinking = true;
-      this.blinkTime = 0;
-      // 30% chance of wink (one eye only)
-      this.isOneEye = Math.random() < 0.3;
-    }
-
-    if (this.isBlinking) {
-      this.blinkTime += dt;
-      const dur = this.isOneEye ? 0.35 : 0.15;
-      const t = this.blinkTime / dur;
-
-      if (t >= 1) {
-        this.isBlinking = false;
-        this.nextBlink = this.time + 2 + Math.random() * 5;
-        const s = this.entity.getLocalScale();
-        this.entity.setLocalScale(s.x, this.originalScaleY, s.z);
-      } else {
-        // Squish the eye vertically
-        const squish = 1 - Math.sin(t * Math.PI) * 0.85;
-        const s = this.entity.getLocalScale();
-        this.entity.setLocalScale(s.x, this.originalScaleY * squish, s.z);
-      }
-    }
-  }
-}
-
-// Second eye with offset timing for winks
-class EyeBlinkAlt extends PcScript {
-  static override scriptName = 'eyeBlinkAlt';
-  time = 0;
-  nextBlink = 0;
-  isBlinking = false;
-  blinkTime = 0;
-  originalScaleY = 1;
-
-  initialize() {
-    this.time = Math.random() * 10;
-    this.nextBlink = 1.5 + Math.random() * 4;
-    this.originalScaleY = this.entity.getLocalScale().y;
-  }
-
-  update(dt: number) {
-    this.time += dt;
-
-    if (!this.isBlinking && this.time > this.nextBlink) {
-      this.isBlinking = true;
-      this.blinkTime = 0;
-    }
-
-    if (this.isBlinking) {
-      this.blinkTime += dt;
-      const t = this.blinkTime / 0.15;
-
-      if (t >= 1) {
-        this.isBlinking = false;
-        // Sometimes do a slow wink
-        this.nextBlink = this.time + 2 + Math.random() * 6;
-        const s = this.entity.getLocalScale();
-        this.entity.setLocalScale(s.x, this.originalScaleY, s.z);
-      } else {
-        const squish = 1 - Math.sin(t * Math.PI) * 0.85;
-        const s = this.entity.getLocalScale();
-        this.entity.setLocalScale(s.x, this.originalScaleY * squish, s.z);
-      }
-    }
-  }
-}
-
 // Color palettes
 function useGopherMaterials(color: PieceColor) {
   const isWhite = color === 'white';
@@ -271,7 +183,9 @@ function tintModel(
       const brightness = r + g + b;
       PROCESSED.add(mi);
       if (brightness < 0.1) { blacks.push(mi); continue; }
-      if (brightness > 2.0) { mi.material = eyeWhiteMat; whites.push(mi); continue; }
+      // Eyes/tooth: very bright AND all channels close to each other (near-white)
+      // Threshold 2.5 avoids misclassifying tan belly (brightness ~2.0-2.1) as eyes
+      if (brightness > 2.5 && Math.min(r, g, b) > 0.7) { mi.material = eyeWhiteMat; whites.push(mi); continue; }
       if (r > 0.5 && g > 0.3) mi.material = bellyMat;
       else mi.material = bodyMat;
     }
@@ -339,8 +253,8 @@ function GopherGlb({ color, scale = 1 }: { color: PieceColor; scale?: number }) 
   const { asset } = useModel(GOPHER_GLB_URL);
   const entityRef = useRef<PcEntity | null>(null);
   const eyePartsRef = useRef<EyeParts | null>(null);
-  const [visible, setVisible] = useState(false);
   const isWhite = color === 'white';
+  const glbScale = 0.20 * scale;
 
   const bodyMat = useMaterial({
     diffuse: isWhite ? [0.42, 0.84, 0.9] : [0.81, 0.4, 0.15],
@@ -359,47 +273,49 @@ function GopherGlb({ color, scale = 1 }: { color: PieceColor; scale?: number }) 
     specular: [0.3, 0.3, 0.3],
   });
 
-  // Tint pass — hide until complete to prevent color flash
-  useEffect(() => {
+  // Shared tint state across layout + deferred effects
+  const tintStateRef = useRef({ whites: [] as MeshInstance[], blacks: [] as MeshInstance[], done: false });
+
+  // Synchronous tint attempt — blocks paint so first frame shows correct colors if meshes are ready
+  useLayoutEffect(() => {
     if (!entityRef.current || !bodyMat || !bellyMat || !eyeWhiteMat) return;
-    const entity = entityRef.current;
-    let active = true;
-    setVisible(false);
-    const allWhites: MeshInstance[] = [];
-    const allBlacks: MeshInstance[] = [];
-    let totalProcessed = 0;
-
-    const apply = () => {
-      if (!active) return;
-      const newWhites: MeshInstance[] = [];
-      const newBlacks: MeshInstance[] = [];
-      tintModel(entity, bodyMat, bellyMat, eyeWhiteMat, newWhites, newBlacks);
-      const newCount = newWhites.length + newBlacks.length;
-      if (newWhites.length > 0) allWhites.push(...newWhites);
-      if (newBlacks.length > 0) allBlacks.push(...newBlacks);
-      totalProcessed += newCount;
-
-      if (allWhites.length >= 2) {
-        eyePartsRef.current = buildEyeParts(allWhites, allBlacks);
-      }
-
-      if (totalProcessed >= GOPHER_MESH_COUNT) {
-        setVisible(true);
-        return;
-      }
-      // Show after first successful tint even if not all meshes yet
-      if (totalProcessed > 0) setVisible(true);
-      setTimeout(apply, totalProcessed > 0 ? 16 : 50);
-    };
-
-    apply();
-    return () => { active = false; };
+    const ts = tintStateRef.current;
+    ts.whites = []; ts.blacks = []; ts.done = false;
+    tintModel(entityRef.current, bodyMat, bellyMat, eyeWhiteMat, ts.whites, ts.blacks);
+    if (ts.whites.length >= 2) eyePartsRef.current = buildEyeParts(ts.whites, ts.blacks);
+    ts.done = countMeshInstances(entityRef.current) >= GOPHER_MESH_COUNT;
   }, [asset, bodyMat, bellyMat, eyeWhiteMat]);
 
-  // Goofy blink — use castShadow toggle instead of visible to avoid shadow flicker
+  // Deferred retry for meshes not yet loaded during layout pass
+  useEffect(() => {
+    const ts = tintStateRef.current;
+    if (ts.done || !entityRef.current || !bodyMat || !bellyMat || !eyeWhiteMat) return;
+    const entity = entityRef.current;
+    let active = true;
+    let rafId = 0;
+
+    const retry = () => {
+      if (!active) return;
+      const w: MeshInstance[] = [], b: MeshInstance[] = [];
+      tintModel(entity, bodyMat, bellyMat, eyeWhiteMat, w, b);
+      if (w.length > 0) ts.whites.push(...w);
+      if (b.length > 0) ts.blacks.push(...b);
+      if (ts.whites.length >= 2) eyePartsRef.current = buildEyeParts(ts.whites, ts.blacks);
+      if (countMeshInstances(entity) < GOPHER_MESH_COUNT) {
+        rafId = requestAnimationFrame(retry);
+      } else {
+        ts.done = true;
+      }
+    };
+    rafId = requestAnimationFrame(retry);
+    return () => { active = false; cancelAnimationFrame(rafId); };
+  }, [asset, bodyMat, bellyMat, eyeWhiteMat]);
+
+  // Goofy blink animation
   useEffect(() => {
     if (!blinkMat || !eyeWhiteMat) return;
     let active = true;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
     const closeEye = (group: EyeGroup) => {
       for (const mi of group.whites) mi.material = blinkMat;
@@ -414,7 +330,7 @@ function GopherGlb({ color, scale = 1 }: { color: PieceColor; scale?: number }) 
       if (!active) return;
       const parts = eyePartsRef.current;
       if (!parts || (parts.left.whites.length === 0 && parts.right.whites.length === 0)) {
-        setTimeout(startBlink, 500);
+        timers.push(setTimeout(startBlink, 500));
         return;
       }
 
@@ -434,31 +350,35 @@ function GopherGlb({ color, scale = 1 }: { color: PieceColor; scale?: number }) 
         blinkDuration = 400 + Math.random() * 200;
       }
 
-      setTimeout(() => {
+      timers.push(setTimeout(() => {
         if (!active) return;
         openEye(parts.left); openEye(parts.right);
-        setTimeout(startBlink, 1500 + Math.random() * 4500);
-      }, blinkDuration);
+        timers.push(setTimeout(startBlink, 1500 + Math.random() * 4500));
+      }, blinkDuration));
     };
 
-    const timer = setTimeout(startBlink, 2000 + Math.random() * 3000);
-    return () => { active = false; clearTimeout(timer); };
+    timers.push(setTimeout(startBlink, 2000 + Math.random() * 3000));
+    return () => { active = false; timers.forEach(clearTimeout); };
   }, [blinkMat, eyeWhiteMat]);
 
   if (!asset) return null;
 
-  const glbScale = 0.20 * scale;
-
   return (
     <Entity
       position={[0, 0.38, 0]}
-      scale={visible ? [glbScale, glbScale, glbScale] : [0, 0, 0]}
+      scale={[glbScale, glbScale, glbScale]}
       rotation={[0, 0, 7]}
       ref={entityRef as any}
     >
       <Gltf asset={asset} key={`gopher-${asset.id}-${color}`} />
     </Entity>
   );
+}
+
+function countMeshInstances(entity: PcEntity): number {
+  let count = entity.render ? entity.render.meshInstances.length : 0;
+  for (const child of entity.children) count += countMeshInstances(child as PcEntity);
+  return count;
 }
 
 function CrownGlb({ scale = 1, yOffset = 0, color }: { scale?: number; yOffset?: number; color?: string }) {
@@ -474,12 +394,11 @@ function CrownGlb({ scale = 1, yOffset = 0, color }: { scale?: number; yOffset?:
     if (!entityRef.current || !goldMat) return;
     const entity = entityRef.current;
     let active = true;
-    let frameCount = 0;
     const apply = () => {
       if (!active) return;
       applyTintToTree(entity, goldMat);
-      frameCount++;
-      if (frameCount < 30) requestAnimationFrame(apply);
+      // Retry once for late-loading meshes
+      setTimeout(() => { if (active) applyTintToTree(entity, goldMat); }, 100);
     };
     requestAnimationFrame(apply);
     return () => { active = false; };
@@ -637,6 +556,13 @@ interface ChessPieceProps {
   col: number;
   isSelected: boolean;
   onClick: () => void;
+  // Animation props — when set, piece animates itself instead of unmounting
+  animFrom?: Pos;
+  animTo?: Pos;
+  animProgress?: number;
+  animIsKnight?: boolean;
+  hidden?: boolean; // Keep mounted but invisible (e.g. captured victim during animation)
+  lookAt?: [number, number]; // [row, col] — piece rotates to face this square (e.g. during cutscene)
 }
 
 const PIECE_COMPONENTS: Record<PieceType, React.FC<{ color: PieceColor }>> = {
@@ -657,31 +583,71 @@ function getComponents(style: PieceStyle) {
   return style === 'classic' ? CLASSIC_PIECE_COMPONENTS : PIECE_COMPONENTS;
 }
 
-export function ChessPiece({ type, color, row, col, isSelected, onClick, pieceStyle = 'gopher' }: ChessPieceProps & { pieceStyle?: PieceStyle }) {
+export const ChessPiece = React.memo(function ChessPiece({ type, color, row, col, isSelected, onClick, pieceStyle = 'gopher', animFrom, animTo, animProgress, animIsKnight, hidden, lookAt }: ChessPieceProps & { pieceStyle?: PieceStyle }) {
   const PieceComponent = getComponents(pieceStyle)[type];
   const isClassic = pieceStyle === 'classic';
 
-  const x = col - 3.5;
-  const z = row - 3.5;
-  const y = BOARD_SURFACE_Y + (isSelected ? 0.08 : 0);
+  const isAnimating = animFrom && animTo && animProgress !== undefined;
 
-  // Facing rotation on INNER entity so GopherIdle script on outer entity doesn't override it
-  const facingY = color === 'white' ? 180 : 0;
+  let x: number, y: number, z: number;
+  let wobble = 0;
+  let facingY = color === 'white' ? 180 : 0;
+
+  if (isAnimating) {
+    const fromX = animFrom[1] - 3.5;
+    const fromZ = animFrom[0] - 3.5;
+    const toX = animTo[1] - 3.5;
+    const toZ = animTo[0] - 3.5;
+
+    const t = animProgress < 0.5
+      ? 2 * animProgress * animProgress
+      : 1 - Math.pow(-2 * animProgress + 2, 2) / 2;
+
+    x = fromX + (toX - fromX) * t;
+    z = fromZ + (toZ - fromZ) * t;
+
+    const arcHeight = animIsKnight
+      ? Math.sin(t * Math.PI) * 1.5
+      : Math.sin(t * Math.PI) * 0.15;
+    y = BOARD_SURFACE_Y + arcHeight;
+
+    wobble = Math.sin(animProgress * Math.PI * 6) * 8 * (1 - Math.abs(2 * animProgress - 1));
+
+    const dx = toX - fromX;
+    const dz = toZ - fromZ;
+    facingY = Math.atan2(dx, dz) * (180 / Math.PI);
+  } else {
+    x = col - 3.5;
+    z = row - 3.5;
+    y = BOARD_SURFACE_Y + (isSelected ? 0.08 : 0);
+  }
+
+  // During cutscene: rotate to face the action
+  if (lookAt && !isAnimating) {
+    const targetX = lookAt[1] - 3.5;
+    const targetZ = lookAt[0] - 3.5;
+    const dx = targetX - x;
+    const dz = targetZ - z;
+    facingY = Math.atan2(dx, dz) * (180 / Math.PI);
+  }
+
+  const scale: [number, number, number] = hidden ? [0, 0, 0] : [1, 1, 1];
 
   return (
     <Entity
       name={`${color}-${type}`}
       position={[x, y, z]}
-      onClick={onClick}
+      scale={scale}
+      rotation={[0, 0, wobble]}
+      onClick={hidden ? undefined : onClick}
     >
-      {!isClassic && <Script script={GopherIdle} />}
-      {/* Inner facing wrapper - isolated from idle animation rotation */}
+      {!isClassic && !isAnimating && !lookAt && <Script script={GopherIdle} />}
       <Entity rotation={[0, facingY, 0]}>
         <PieceComponent color={color} />
       </Entity>
     </Entity>
   );
-}
+});
 
 // ---- Animating piece (moving from one square to another) ----
 
@@ -695,9 +661,9 @@ interface AnimatingPieceProps {
 }
 
 // Ghost piece rendered during cutscene - victim gets hit and launched away
-export function GhostPiece({ type, color, row, col, phase, knockbackAngle = 0, pieceStyle = 'gopher' }: {
+export function GhostPiece({ type, color, row, col, phase, knockbackAngle = 0, attackAngle = 0, pieceStyle = 'gopher' }: {
   type: PieceType; color: PieceColor; row: number; col: number; phase: number;
-  knockbackAngle?: number; pieceStyle?: PieceStyle;
+  knockbackAngle?: number; attackAngle?: number; pieceStyle?: PieceStyle;
 }) {
   const PieceComponent = getComponents(pieceStyle)[type];
   const x = col - 3.5;
@@ -711,26 +677,20 @@ export function GhostPiece({ type, color, row, col, phase, knockbackAngle = 0, p
   let rotX = 0, rotZ = 0;
 
   if (launched) {
-    // After hit: fly away in knockback direction with arc
     const t = Math.min((phase - hitPhase) / 0.26, 1);
     const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
-    // Launch in knockback direction
     const dist = eased * 3;
     posX += Math.sin(knockbackAngle) * dist;
     posZ += Math.cos(knockbackAngle) * dist;
 
-    // Arc upward then fall below board
     posY += Math.sin(eased * Math.PI) * 1.8 - eased * 1.2;
 
-    // Wild tumbling
     rotX = eased * 420;
     rotZ = eased * 240;
 
-    // Shrink near end
     scale = Math.max(0, 1 - eased * 0.9);
   } else {
-    // Before hit: scared shaking (gets more intense closer to impact)
     const fear = smoothstepLocal(0.25, 0.42, phase);
     const shake = fear * 5;
     posX += Math.sin(phase * 90) * 0.015 * shake;
@@ -739,7 +699,8 @@ export function GhostPiece({ type, color, row, col, phase, knockbackAngle = 0, p
 
   if (scale <= 0.01) return null;
 
-  const facingY = color === 'white' ? 180 : 0;
+  // Face the attacker before being hit, then tumble wildly after
+  const facingY = launched ? color === 'white' ? 180 : 0 : attackAngle * (180 / Math.PI) + 180;
 
   return (
     <Entity position={[posX, posY, posZ]} scale={[scale, scale, scale]} rotation={[rotX, 0, rotZ]}>

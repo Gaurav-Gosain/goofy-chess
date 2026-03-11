@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type JSX } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, type JSX } from 'react';
 import { Application, Entity } from '@playcanvas/react';
 import { Camera, Light, Render } from '@playcanvas/react/components';
 import { OrbitControls } from '@playcanvas/react/scripts';
@@ -11,7 +11,7 @@ import {
   type GameState, type Pos, type PieceColor, type PieceType,
 } from './chess/engine';
 import { ChessBoard } from './chess/Board';
-import { ChessPiece, AnimatingPiece, GhostPiece, CutsceneAttacker, FallenKing, BOARD_SURFACE_Y, PIECE_COMPONENTS, type PieceStyle } from './chess/pieces';
+import { ChessPiece, GhostPiece, CutsceneAttacker, FallenKing, BOARD_SURFACE_Y, PIECE_COMPONENTS, type PieceStyle } from './chess/pieces';
 import { CutsceneWeapon, WEAPON_DEFS, pickWeapon, getProjectilePos, type Weapon3D, type Blaster3D, type WeaponCategory } from './chess/weapons';
 import { GameUI } from './chess/GameUI';
 import { CutsceneOverlay } from './chess/CutsceneOverlay';
@@ -148,6 +148,44 @@ function Scene() {
   const checkmateFrameRef = useRef<number>(0);
   const returnFrameRef = useRef<number>(0);
 
+  // Stable piece ID map: tracks each piece by position → unique ID
+  // This prevents unmount/remount (and tint flash) when pieces move
+  const pieceIdCounter = useRef(0);
+  const pieceIdMap = useRef<Map<string, string>>(new Map());
+
+  // Initialize piece IDs on first render and on new game
+  const ensurePieceIds = useCallback((board: (import('./chess/engine').Piece | null)[][]) => {
+    const currentPositions = new Set<string>();
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (board[r]?.[c]) {
+          const key = `${r}-${c}`;
+          currentPositions.add(key);
+          if (!pieceIdMap.current.has(key)) {
+            pieceIdMap.current.set(key, `p${pieceIdCounter.current++}`);
+          }
+        }
+      }
+    }
+    // Clean up positions that no longer have pieces
+    for (const key of pieceIdMap.current.keys()) {
+      if (!currentPositions.has(key)) pieceIdMap.current.delete(key);
+    }
+  }, []);
+
+  // Transfer piece ID when a move completes
+  const transferPieceId = useCallback((from: import('./chess/engine').Pos, to: import('./chess/engine').Pos) => {
+    const fromKey = `${from[0]}-${from[1]}`;
+    const toKey = `${to[0]}-${to[1]}`;
+    const id = pieceIdMap.current.get(fromKey);
+    if (id) {
+      pieceIdMap.current.delete(fromKey);
+      // Remove victim's ID if capture
+      pieceIdMap.current.delete(toKey);
+      pieceIdMap.current.set(toKey, id);
+    }
+  }, []);
+
   // Camera override for cutscenes + return
   const [camPos, setCamPos] = useState<[number, number, number]>(DEFAULT_CAM_POS);
   const [camRot, setCamRot] = useState<[number, number, number]>(DEFAULT_CAM_ROT);
@@ -240,6 +278,8 @@ function Scene() {
         if (!prev) return null;
         const newProgress = prev.progress + dt * speed;
         if (newProgress >= 1) {
+          // Transfer stable piece ID from source to destination
+          transferPieceId(prev.from, prev.to);
           if (prev.isCapture && cinematicCaptures && prev.capturedType) {
             startCutscene(prev);
           } else {
@@ -827,6 +867,8 @@ function Scene() {
     const replay = createReplayState(pgn);
     if (!replay) return;
     // Reset game to initial
+    pieceIdMap.current.clear();
+    pieceIdCounter.current = 0;
     setGameState(createInitialState());
     setSelectedSquare(null);
     setValidMoves([]);
@@ -897,6 +939,8 @@ function Scene() {
   const handleNewGame = useCallback(() => {
     memeAudio.stopAll();
     gameGenRef.current++;
+    pieceIdMap.current.clear();
+    pieceIdCounter.current = 0;
     setGameState(createInitialState());
     setSelectedSquare(null);
     setValidMoves([]);
@@ -961,31 +1005,57 @@ function Scene() {
     setValidMoves([]);
   }, [gameState, selectedSquare, validMoves, gameMode, aiThinking, animation, cutscene, checkmateAnim, executeMove]);
 
-  // Build pieces list
+  // Stable click handlers per square — avoids new lambdas that defeat React.memo
+  const squareClickHandlers = useMemo(() => {
+    const handlers: (() => void)[][] = [];
+    for (let r = 0; r < 8; r++) {
+      handlers[r] = [];
+      for (let c = 0; c < 8; c++) {
+        const pos: Pos = [r, c];
+        handlers[r]![c] = () => handleSquareClick(pos);
+      }
+    }
+    return handlers;
+  }, [handleSquareClick]);
+
+  // Build pieces list with stable keys to prevent unmount/remount flicker
+  ensurePieceIds(gameState.board);
   const pieces: JSX.Element[] = [];
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
-      if (animation && animation.from[0] === row && animation.from[1] === col) continue;
-      if (animation && animation.isCapture && animation.to[0] === row && animation.to[1] === col) continue;
       // During cutscene, skip the attacker at capture pos (rendered separately as CutsceneAttacker)
       if (cutscene && cutscene.capturePos[0] === row && cutscene.capturePos[1] === col) continue;
       // During checkmate, skip the losing king (rendered as FallenKing)
       if (checkmateAnim && checkmateAnim.loserKingPos[0] === row && checkmateAnim.loserKingPos[1] === col) continue;
 
       const piece = gameState.board[row]?.[col];
-      if (piece) {
-        const isSelected = selectedSquare !== null && selectedSquare[0] === row && selectedSquare[1] === col;
-        pieces.push(
-          <ChessPiece
-            key={`${row}-${col}-${piece.type}-${piece.color}`}
-            type={piece.type} color={piece.color}
-            row={row} col={col}
-            isSelected={isSelected}
-            onClick={() => handleSquareClick([row, col])}
-            pieceStyle={pieceStyle}
-          />
-        );
-      }
+      if (!piece) continue;
+
+      const isSelected = selectedSquare !== null && selectedSquare[0] === row && selectedSquare[1] === col;
+      const posKey = `${row}-${col}`;
+      const stableId = pieceIdMap.current.get(posKey) || posKey;
+
+      // Is this piece the one being animated?
+      const isMoving = animation && animation.from[0] === row && animation.from[1] === col;
+      // Is this piece being captured during animation? (hide it, but keep mounted)
+      const isVictim = animation && animation.isCapture && animation.to[0] === row && animation.to[1] === col;
+
+      pieces.push(
+        <ChessPiece
+          key={stableId}
+          type={piece.type} color={piece.color}
+          row={row} col={col}
+          isSelected={isSelected}
+          onClick={squareClickHandlers[row]![col]!}
+          pieceStyle={pieceStyle}
+          animFrom={isMoving ? animation.from : undefined}
+          animTo={isMoving ? animation.to : undefined}
+          animProgress={isMoving ? animation.progress : undefined}
+          animIsKnight={isMoving ? animation.isKnight : undefined}
+          hidden={!!isVictim}
+          lookAt={cutscene ? cutscene.capturePos : undefined}
+        />
+      );
     }
   }
 
@@ -1143,14 +1213,7 @@ function Scene() {
 
         {pieces}
 
-        {animation && (
-          <AnimatingPiece
-            type={animation.pieceType} color={animation.pieceColor}
-            from={animation.from} to={animation.to}
-            progress={animation.progress} isKnight={animation.isKnight}
-            pieceStyle={pieceStyle}
-          />
-        )}
+        {/* Pieces now self-animate via animFrom/animTo/animProgress props */}
 
         {/* Cutscene attacker - melee: behind victim; ranged: at fromPos */}
         {cutscene && (
@@ -1175,6 +1238,7 @@ function Scene() {
             col={cutscene.capturePos[1]}
             phase={cutscene.phase}
             knockbackAngle={cutscene.attackAngle}
+            attackAngle={cutscene.attackAngle}
             pieceStyle={pieceStyle}
           />
         )}
